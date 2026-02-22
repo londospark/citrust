@@ -1,6 +1,9 @@
+use std::cmp::min;
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
+
+use rayon::prelude::*;
 
 use crate::crypto::aes_ctr_decrypt;
 use crate::keys::{self, CryptoMethod, Key128, CONSTANT, KEY_X_2C};
@@ -15,6 +18,100 @@ pub enum Error {
     InvalidNcch(u8),
     #[error("I/O error: {0}")]
     Io(#[from] io::Error),
+}
+
+/// Batch size for parallel decryption (64 MB)
+const BATCH_SIZE: usize = 64 * 1024 * 1024;
+
+/// Decrypt a contiguous region in parallel batches using a single key layer.
+/// Reads `total_bytes` from `reader` at `file_offset`, decrypts with AES-CTR
+/// using `key` and `base_iv`, and writes back to `writer`.
+fn decrypt_parallel(
+    reader: &mut File,
+    writer: &mut File,
+    file_offset: u64,
+    total_bytes: usize,
+    key: &Key128,
+    base_iv: u128,
+    chunk_size: usize,
+    on_progress: &mut impl FnMut(&str),
+    progress_label: &str,
+) -> io::Result<()> {
+    let total_mb = total_bytes / (1024 * 1024) + 1;
+    let mut bytes_done: usize = 0;
+
+    while bytes_done < total_bytes {
+        let batch_len = min(BATCH_SIZE, total_bytes - bytes_done);
+        let batch_file_offset = file_offset + bytes_done as u64;
+
+        reader.seek(SeekFrom::Start(batch_file_offset))?;
+        let mut batch = vec![0u8; batch_len];
+        reader.read_exact(&mut batch)?;
+
+        let batch_block_offset = bytes_done as u128 / 16;
+        batch.par_chunks_mut(chunk_size).enumerate().for_each(|(i, chunk)| {
+            let blocks_before = batch_block_offset + (i * chunk_size) as u128 / 16;
+            let chunk_iv = base_iv + blocks_before;
+            aes_ctr_decrypt(key, chunk_iv, chunk);
+        });
+
+        writer.seek(SeekFrom::Start(batch_file_offset))?;
+        writer.write_all(&batch)?;
+
+        bytes_done += batch_len;
+        on_progress(&format!(
+            "\r{progress_label}: {} / {} mb",
+            bytes_done / (1024 * 1024),
+            total_mb
+        ));
+    }
+    Ok(())
+}
+
+/// Decrypt a contiguous region in parallel batches using two key layers
+/// (for .code double-layer decryption: first key_bytes then key_2c_bytes).
+fn decrypt_parallel_double(
+    reader: &mut File,
+    writer: &mut File,
+    file_offset: u64,
+    total_bytes: usize,
+    key_first: &Key128,
+    key_second: &Key128,
+    base_iv: u128,
+    chunk_size: usize,
+    on_progress: &mut impl FnMut(&str),
+    progress_label: &str,
+) -> io::Result<()> {
+    let total_mb = total_bytes / (1024 * 1024) + 1;
+    let mut bytes_done: usize = 0;
+
+    while bytes_done < total_bytes {
+        let batch_len = min(BATCH_SIZE, total_bytes - bytes_done);
+        let batch_file_offset = file_offset + bytes_done as u64;
+
+        reader.seek(SeekFrom::Start(batch_file_offset))?;
+        let mut batch = vec![0u8; batch_len];
+        reader.read_exact(&mut batch)?;
+
+        let batch_block_offset = bytes_done as u128 / 16;
+        batch.par_chunks_mut(chunk_size).enumerate().for_each(|(i, chunk)| {
+            let blocks_before = batch_block_offset + (i * chunk_size) as u128 / 16;
+            let chunk_iv = base_iv + blocks_before;
+            aes_ctr_decrypt(key_first, chunk_iv, chunk);
+            aes_ctr_decrypt(key_second, chunk_iv, chunk);
+        });
+
+        writer.seek(SeekFrom::Start(batch_file_offset))?;
+        writer.write_all(&batch)?;
+
+        bytes_done += batch_len;
+        on_progress(&format!(
+            "\r{progress_label}: {} / {} mb...",
+            bytes_done / (1024 * 1024),
+            total_mb
+        ));
+    }
+    Ok(())
 }
 
 pub fn decrypt_rom(path: &Path, mut on_progress: impl FnMut(&str)) -> Result<(), Error> {
@@ -146,60 +243,19 @@ pub fn decrypt_rom(path: &Path, mut on_progress: impl FnMut(&str)) -> Result<(),
                                     * sector_size as u64)
                                     + code_file_off as u64;
 
-                            let data_len_m =
-                                code_file_len as usize / (1024 * 1024);
-                            let data_len_b =
-                                code_file_len as usize % (1024 * 1024);
-
-                            let mut current_offset = code_abs_offset;
-                            let mut blocks_processed: u128 = 0;
-
-                            for i in 0..data_len_m {
-                                let chunk_size = 1024 * 1024;
-                                reader
-                                    .seek(SeekFrom::Start(current_offset))?;
-                                let mut chunk = vec![0u8; chunk_size];
-                                reader.read_exact(&mut chunk)?;
-
-                                let chunk_iv = code_iv + blocks_processed;
-                                aes_ctr_decrypt(
-                                    &key_bytes, chunk_iv, &mut chunk,
-                                );
-                                aes_ctr_decrypt(
-                                    &key_2c_bytes, chunk_iv, &mut chunk,
-                                );
-
-                                writer
-                                    .seek(SeekFrom::Start(current_offset))?;
-                                writer.write_all(&chunk)?;
-
-                                blocks_processed += chunk_size as u128 / 16;
-                                current_offset += chunk_size as u64;
-
-                                on_progress(&format!(
-                                    "\rPartition {p} ExeFS: Decrypting: .code... {} / {} mb...",
-                                    i,
-                                    data_len_m + 1
-                                ));
-                            }
-                            if data_len_b > 0 {
-                                reader
-                                    .seek(SeekFrom::Start(current_offset))?;
-                                let mut chunk = vec![0u8; data_len_b];
-                                reader.read_exact(&mut chunk)?;
-
-                                let chunk_iv = code_iv + blocks_processed;
-                                aes_ctr_decrypt(
-                                    &key_bytes, chunk_iv, &mut chunk,
-                                );
-                                aes_ctr_decrypt(
-                                    &key_2c_bytes, chunk_iv, &mut chunk,
-                                );
-
-                                writer
-                                    .seek(SeekFrom::Start(current_offset))?;
-                                writer.write_all(&chunk)?;
-                            }
+                            let label = format!("Partition {p} ExeFS: Decrypting: .code");
+                            decrypt_parallel_double(
+                                &mut reader,
+                                &mut writer,
+                                code_abs_offset,
+                                code_file_len as usize,
+                                &key_bytes,
+                                &key_2c_bytes,
+                                code_iv,
+                                1024 * 1024,
+                                &mut on_progress,
+                                &label,
+                            )?;
                             on_progress(&format!(
                                 "Partition {p} ExeFS: Decrypting: .code... Done!"
                             ));
@@ -214,10 +270,6 @@ pub fn decrypt_rom(path: &Path, mut on_progress: impl FnMut(&str)) -> Result<(),
             if exefs_data_sectors > 0 {
                 let exefs_data_size =
                     exefs_data_sectors as u64 * sector_size as u64;
-                let exefs_data_m =
-                    exefs_data_size as usize / (1024 * 1024);
-                let exefs_data_b =
-                    exefs_data_size as usize % (1024 * 1024);
                 let ctr_offset = sector_size as u128 / 0x10;
                 let data_iv = exefs_iv + ctr_offset;
 
@@ -226,44 +278,18 @@ pub fn decrypt_rom(path: &Path, mut on_progress: impl FnMut(&str)) -> Result<(),
                     + 1)
                     * sector_size as u64;
 
-                let mut current_offset = exefs_data_offset;
-                let mut blocks_processed: u128 = 0;
-
-                for i in 0..exefs_data_m {
-                    let chunk_size = 1024 * 1024;
-                    reader.seek(SeekFrom::Start(current_offset))?;
-                    let mut chunk = vec![0u8; chunk_size];
-                    reader.read_exact(&mut chunk)?;
-
-                    aes_ctr_decrypt(
-                        &key_2c_bytes,
-                        data_iv + blocks_processed,
-                        &mut chunk,
-                    );
-
-                    writer.seek(SeekFrom::Start(current_offset))?;
-                    writer.write_all(&chunk)?;
-
-                    blocks_processed += chunk_size as u128 / 16;
-                    current_offset += chunk_size as u64;
-                    on_progress(&format!(
-                        "\rPartition {p} ExeFS: Decrypting: {} / {} mb",
-                        i,
-                        exefs_data_m + 1
-                    ));
-                }
-                if exefs_data_b > 0 {
-                    reader.seek(SeekFrom::Start(current_offset))?;
-                    let mut chunk = vec![0u8; exefs_data_b];
-                    reader.read_exact(&mut chunk)?;
-                    aes_ctr_decrypt(
-                        &key_2c_bytes,
-                        data_iv + blocks_processed,
-                        &mut chunk,
-                    );
-                    writer.seek(SeekFrom::Start(current_offset))?;
-                    writer.write_all(&chunk)?;
-                }
+                let label = format!("Partition {p} ExeFS: Decrypting");
+                decrypt_parallel(
+                    &mut reader,
+                    &mut writer,
+                    exefs_data_offset,
+                    exefs_data_size as usize,
+                    &key_2c_bytes,
+                    data_iv,
+                    1024 * 1024,
+                    &mut on_progress,
+                    &label,
+                )?;
                 on_progress(&format!(
                     "Partition {p} ExeFS: Decrypting: Done"
                 ));
@@ -276,55 +302,27 @@ pub fn decrypt_rom(path: &Path, mut on_progress: impl FnMut(&str)) -> Result<(),
 
         // ======= DECRYPT ROMFS =======
         if ncch.romfs_offset != 0 {
-            let romfs_block_size: usize = 4 * 1024 * 1024;
+            let romfs_chunk_size: usize = 4 * 1024 * 1024;
             let romfs_total_bytes =
                 ncch.romfs_length as u64 * sector_size as u64;
-            let romfs_size_m =
-                romfs_total_bytes as usize / romfs_block_size;
-            let romfs_size_b =
-                romfs_total_bytes as usize % romfs_block_size;
-            let romfs_total_mb = romfs_total_bytes / (1024 * 1024) + 1;
 
             let romfs_iv = ncch.romfs_iv();
             let romfs_offset = (part.offset_sectors as u64
                 + ncch.romfs_offset as u64)
                 * sector_size as u64;
 
-            let mut current_offset = romfs_offset;
-            let mut blocks_processed: u128 = 0;
-
-            for i in 0..romfs_size_m {
-                reader.seek(SeekFrom::Start(current_offset))?;
-                let mut chunk = vec![0u8; romfs_block_size];
-                reader.read_exact(&mut chunk)?;
-                aes_ctr_decrypt(
-                    &key_bytes,
-                    romfs_iv + blocks_processed,
-                    &mut chunk,
-                );
-                writer.seek(SeekFrom::Start(current_offset))?;
-                writer.write_all(&chunk)?;
-
-                blocks_processed += romfs_block_size as u128 / 16;
-                current_offset += romfs_block_size as u64;
-                on_progress(&format!(
-                    "\rPartition {p} RomFS: Decrypting: {} / {} mb",
-                    (i as u64) * 16,
-                    romfs_total_mb
-                ));
-            }
-            if romfs_size_b > 0 {
-                reader.seek(SeekFrom::Start(current_offset))?;
-                let mut chunk = vec![0u8; romfs_size_b];
-                reader.read_exact(&mut chunk)?;
-                aes_ctr_decrypt(
-                    &key_bytes,
-                    romfs_iv + blocks_processed,
-                    &mut chunk,
-                );
-                writer.seek(SeekFrom::Start(current_offset))?;
-                writer.write_all(&chunk)?;
-            }
+            let label = format!("Partition {p} RomFS: Decrypting");
+            decrypt_parallel(
+                &mut reader,
+                &mut writer,
+                romfs_offset,
+                romfs_total_bytes as usize,
+                &key_bytes,
+                romfs_iv,
+                romfs_chunk_size,
+                &mut on_progress,
+                &label,
+            )?;
             on_progress(&format!(
                 "Partition {p} RomFS: Decrypting: Done"
             ));
