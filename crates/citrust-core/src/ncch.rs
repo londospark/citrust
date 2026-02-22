@@ -122,49 +122,49 @@ impl NcchHeader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
     use crate::keys::CryptoMethod;
+    use std::io::Cursor;
 
     fn create_minimal_ncch_header() -> Vec<u8> {
         let mut data = vec![0u8; 0x200];
-        
+
         // KeyY: first 16 bytes
         let key_y = 0x12345678_9ABCDEF0_FEDCBA98_76543210u128;
         data[0..16].copy_from_slice(&key_y.to_be_bytes());
-        
+
         // TitleID at 0x108
         let title_id = 0x0004000000055D00u64;
         data[0x108..0x110].copy_from_slice(&title_id.to_le_bytes());
-        
+
         // ExHeader length at 0x180
         data[0x180..0x184].copy_from_slice(&0x800u32.to_le_bytes());
-        
+
         // Partition flags at 0x188
-        data[0x188] = 0x00;  // flags[0]
-        data[0x189] = 0x00;  // flags[1]
-        data[0x18A] = 0x00;  // flags[2]
-        data[0x18B] = 0x00;  // flags[3] - crypto method
-        data[0x18C] = 0x00;  // flags[4]
-        data[0x18D] = 0x00;  // flags[5]
-        data[0x18E] = 0x00;  // flags[6]
-        data[0x18F] = 0x00;  // flags[7] - NoCrypto/FixedKey
-        
+        data[0x188] = 0x00; // flags[0]
+        data[0x189] = 0x00; // flags[1]
+        data[0x18A] = 0x00; // flags[2]
+        data[0x18B] = 0x00; // flags[3] - crypto method
+        data[0x18C] = 0x00; // flags[4]
+        data[0x18D] = 0x00; // flags[5]
+        data[0x18E] = 0x00; // flags[6]
+        data[0x18F] = 0x00; // flags[7] - NoCrypto/FixedKey
+
         // Plain region at 0x190
         data[0x190..0x194].copy_from_slice(&0x0u32.to_le_bytes());
         data[0x194..0x198].copy_from_slice(&0x0u32.to_le_bytes());
-        
+
         // Logo region at 0x198
         data[0x198..0x19C].copy_from_slice(&0x0u32.to_le_bytes());
         data[0x19C..0x1A0].copy_from_slice(&0x0u32.to_le_bytes());
-        
+
         // ExeFS at 0x1A0
         data[0x1A0..0x1A4].copy_from_slice(&0x1000u32.to_le_bytes());
         data[0x1A4..0x1A8].copy_from_slice(&0x800u32.to_le_bytes());
-        
+
         // RomFS at 0x1B0
         data[0x1B0..0x1B4].copy_from_slice(&0x2000u32.to_le_bytes());
         data[0x1B4..0x1B8].copy_from_slice(&0x4000u32.to_le_bytes());
-        
+
         data
     }
 
@@ -172,9 +172,9 @@ mod tests {
     fn test_parse_ncch_header() {
         let data = create_minimal_ncch_header();
         let mut cursor = Cursor::new(data);
-        
+
         let header = NcchHeader::parse(&mut cursor, 0).unwrap();
-        
+
         assert_eq!(header.key_y, 0x12345678_9ABCDEF0_FEDCBA98_76543210u128);
         assert_eq!(header.title_id, 0x0004000000055D00u64);
         assert_eq!(header.exheader_length, 0x800);
@@ -187,23 +187,23 @@ mod tests {
     #[test]
     fn test_crypto_method_detection() {
         let mut data = create_minimal_ncch_header();
-        
+
         // Test each crypto method flag
         data[0x18B] = 0x00;
         let mut cursor = Cursor::new(data.clone());
         let header = NcchHeader::parse(&mut cursor, 0).unwrap();
         assert_eq!(header.crypto_method(), Some(CryptoMethod::Original));
-        
+
         data[0x18B] = 0x01;
         let mut cursor = Cursor::new(data.clone());
         let header = NcchHeader::parse(&mut cursor, 0).unwrap();
         assert_eq!(header.crypto_method(), Some(CryptoMethod::Key7x));
-        
+
         data[0x18B] = 0x0A;
         let mut cursor = Cursor::new(data.clone());
         let header = NcchHeader::parse(&mut cursor, 0).unwrap();
         assert_eq!(header.crypto_method(), Some(CryptoMethod::Key93));
-        
+
         data[0x18B] = 0x0B;
         let mut cursor = Cursor::new(data.clone());
         let header = NcchHeader::parse(&mut cursor, 0).unwrap();
@@ -213,11 +213,11 @@ mod tests {
     #[test]
     fn test_no_crypto_flag() {
         let mut data = create_minimal_ncch_header();
-        
-        data[0x18F] = 0x04;  // Set NoCrypto bit
+
+        data[0x18F] = 0x04; // Set NoCrypto bit
         let mut cursor = Cursor::new(data);
         let header = NcchHeader::parse(&mut cursor, 0).unwrap();
-        
+
         assert!(header.is_no_crypto());
         assert!(!header.is_fixed_key());
     }
@@ -225,11 +225,11 @@ mod tests {
     #[test]
     fn test_fixed_key_flag() {
         let mut data = create_minimal_ncch_header();
-        
-        data[0x18F] = 0x01;  // Set FixedCryptoKey bit
+
+        data[0x18F] = 0x01; // Set FixedCryptoKey bit
         let mut cursor = Cursor::new(data);
         let header = NcchHeader::parse(&mut cursor, 0).unwrap();
-        
+
         assert!(header.is_fixed_key());
         assert!(!header.is_no_crypto());
     }
@@ -239,10 +239,19 @@ mod tests {
         let data = create_minimal_ncch_header();
         let mut cursor = Cursor::new(data);
         let header = NcchHeader::parse(&mut cursor, 0).unwrap();
-        
+
         let title_id = header.title_id as u128;
-        assert_eq!(header.plain_iv(), (title_id << 64) | 0x0100_0000_0000_0000u128);
-        assert_eq!(header.exefs_iv(), (title_id << 64) | 0x0200_0000_0000_0000u128);
-        assert_eq!(header.romfs_iv(), (title_id << 64) | 0x0300_0000_0000_0000u128);
+        assert_eq!(
+            header.plain_iv(),
+            (title_id << 64) | 0x0100_0000_0000_0000u128
+        );
+        assert_eq!(
+            header.exefs_iv(),
+            (title_id << 64) | 0x0200_0000_0000_0000u128
+        );
+        assert_eq!(
+            header.romfs_iv(),
+            (title_id << 64) | 0x0300_0000_0000_0000u128
+        );
     }
 }

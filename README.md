@@ -3,7 +3,7 @@
 [![CI](https://github.com/londospark/citrust/actions/workflows/ci.yml/badge.svg)](https://github.com/londospark/citrust/actions/workflows/ci.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/londospark/citrust)](https://github.com/londospark/citrust/releases)
 
-A fast 3DS ROM decryption tool, written in Rust. Drop-in replacement for [b3DSDecrypt.py](https://github.com/pyCraft/b3DS) — roughly **4× faster**.
+A fast 3DS ROM decryption tool, written in Rust. Drop-in replacement for [b3DSDecrypt.py](https://github.com/b1k/b3DS) — roughly **4× faster**.
 
 ---
 
@@ -77,4 +77,5 @@ citrust is a Cargo workspace with three crates:
 
 ## 🙏 Credits
 
-- Original Python tool: [b3DSDecrypt.py](https://github.com/pyCraft/b3DS) by pyCraft
+- Original Python decryption tool: [b3DS](https://github.com/b1k/b3DS) by b1k
+- AI team management: [Squad](https://github.com/bradygaster/squad) by Brady Gaster
