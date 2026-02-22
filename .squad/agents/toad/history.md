@@ -79,3 +79,20 @@
 ### Phase 2 Summary: 2026-02-22
 
 Team completed Phase 2 optimization batch. Link achieved 1.50x speedup via AES-NI + 4MB chunk tuning. Phase 3 (multi-threading with rayon) pending. Fox completed Phase 4 GUI (egui/eframe, 1280x800 gamepad-friendly, 9.2 MB binary). Samus deployed GitHub Actions CI/release automation (ci.yml + release.yml for Linux/Windows binaries). All agent learnings documented in history.md; orchestration logs written to .squad/orchestration-log/.
+
+### Content Detection Unit Tests: 2026-02-22
+
+**Task:** Added 5 unit tests for `is_content_decrypted()` content-based detection logic in `decrypt.rs`.
+
+**Tests Added (all passing):**
+1. `test_is_content_decrypted_with_plaintext_exefs` — ".code\0\0\0" as first ExeFS entry → true
+2. `test_is_content_decrypted_with_encrypted_exefs` — random bytes (0xFF, 0xA3...) → false
+3. `test_is_content_decrypted_no_exefs` — exefs_length == 0 → false (can't determine)
+4. `test_is_content_decrypted_with_known_names` — "banner\0\0", "icon\0\0\0\0", "logo\0\0\0\0" → all true
+5. `test_decrypt_rom_skips_already_decrypted` — end-to-end with synthetic ROM: verifies ExeFS content unchanged, data sectors unchanged, NoCrypto flag set
+
+**Key Details:**
+- Link's `is_content_decrypted()` was already implemented when tests were written — all 5 passed immediately
+- Test helpers `make_ncch()` and `build_exefs_data()` construct minimal synthetic fixtures in-memory
+- Test 5 builds a full NCSD+NCCH+ExeFS ROM on disk (0xE00 bytes), uses FixedKey (zero-key) to force entry into decryption path; content detection skips actual AES-CTR
+- Total unit test count: 24 (19 existing + 5 new)

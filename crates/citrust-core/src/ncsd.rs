@@ -71,21 +71,21 @@ mod tests {
     #[test]
     fn test_parse_valid_ncsd_header() {
         let mut data = vec![0u8; 512];
-        
+
         // NCSD magic at 0x100
         data[0x100..0x104].copy_from_slice(b"NCSD");
-        
+
         // Sector size flags at 0x188: flags[6] = 0 means sector_size = 0x200 * 2^0 = 0x200
         data[0x18E] = 0;
-        
+
         // Partition table at 0x120: 8 entries, each 8 bytes (offset, length)
         // First partition: offset=0x1000 sectors, length=0x2000 sectors
         data[0x120..0x124].copy_from_slice(&0x1000u32.to_le_bytes());
         data[0x124..0x128].copy_from_slice(&0x2000u32.to_le_bytes());
-        
+
         let mut cursor = Cursor::new(data);
         let header = NcsdHeader::parse(&mut cursor).unwrap();
-        
+
         assert_eq!(header.sector_size, 0x200);
         assert_eq!(header.partitions[0].offset_sectors, 0x1000);
         assert_eq!(header.partitions[0].length_sectors, 0x2000);
@@ -95,10 +95,10 @@ mod tests {
     fn test_reject_invalid_magic() {
         let mut data = vec![0u8; 512];
         data[0x100..0x104].copy_from_slice(b"XXXX");
-        
+
         let mut cursor = Cursor::new(data);
         let result = NcsdHeader::parse(&mut cursor);
-        
+
         assert!(result.is_err());
     }
 
@@ -106,13 +106,13 @@ mod tests {
     fn test_sector_size_calculation() {
         let mut data = vec![0u8; 512];
         data[0x100..0x104].copy_from_slice(b"NCSD");
-        
+
         // flags[6] = 1 means sector_size = 0x200 * 2^1 = 0x400
         data[0x18E] = 1;
-        
+
         let mut cursor = Cursor::new(data);
         let header = NcsdHeader::parse(&mut cursor).unwrap();
-        
+
         assert_eq!(header.sector_size, 0x400);
     }
 
@@ -122,12 +122,12 @@ mod tests {
             offset_sectors: 0x100,
             length_sectors: 0x200,
         };
-        
+
         let sector_size = 0x200;
         assert_eq!(entry.offset_bytes(sector_size), 0x100 * 0x200);
         assert_eq!(entry.length_bytes(sector_size), 0x200 * 0x200);
         assert!(!entry.is_empty());
-        
+
         let empty = PartitionEntry::default();
         assert!(empty.is_empty());
     }
