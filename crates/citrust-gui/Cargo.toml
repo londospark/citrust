@@ -17,5 +17,4 @@ features = ["default_fonts", "glow", "wayland", "x11"]
 
 [dependencies.rfd]
 version = "0.15"
-default-features = false
 features = ["xdg-portal"]
