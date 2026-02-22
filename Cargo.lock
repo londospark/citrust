@@ -420,7 +420,7 @@ dependencies = [
 
 [[package]]
 name = "citrust-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "citrust-core",
  "clap",
@@ -429,7 +429,7 @@ dependencies = [
 
 [[package]]
 name = "citrust-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "aes",
  "cipher",
@@ -443,7 +443,7 @@ dependencies = [
 
 [[package]]
 name = "citrust-gui"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "citrust-core",
  "eframe",
