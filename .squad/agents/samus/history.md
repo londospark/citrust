@@ -57,3 +57,15 @@
 - **Key decisions**: Latest stable Rust, dtolnay toolchain for simplicity, separate platform builds for native toolchains, Swatinem cache for speed, artifact naming pattern (citrust-{platform}-{arch})
 - **Scope**: Owns .github/workflows/ only; no Cargo.toml or src/ changes
 - **Next**: First version tag (v0.1.0) to validate release automation
+
+### 2026-02-22: Distribution Strategy Analysis Complete
+- **Recommended channels:** Flatpak (Priority #1, SteamOS native), AppImage (Priority #2, portable), winget (Priority #2b, Windows)
+- **Nice-to-have:** AUR (#3, limited by read-only rootfs), Scoop (#4, Windows devs), Homebrew (#5, niche)
+- **Skip:** Snap (SteamOS doesn't use), Steam Store (unfeasible for indie project)
+- **Key deliverables:** Comprehensive 360+ line decision document with requirements, effort estimates, SteamOS considerations, resource links, 3-phase implementation roadmap
+- **Timeline:** Phase 1 (Week 1–2) Flatpak, Phase 2 (Week 2–3) AppImage + winget, Phase 3 (Week 4+) AUR/Scoop
+- **Documentation:** Full analysis merged into `.squad/decisions.md` (lines 8–90 approx). Orchestration log written. Decisions inbox cleared.
+
+### 2026-02-22: Team Batch Orchestration Complete
+- **Agents deployed:** Link (sync, workspace conversion ✅), Fox (background, GUI implementation ✅), Samus (background, distribution strategy ✅)
+- **Deliverables:** Orchestration logs written for each agent. Session log created. All inbox decisions merged into decisions.md. Inbox directory cleared. Agent history.md files updated with cross-team context. Git commit pending.
