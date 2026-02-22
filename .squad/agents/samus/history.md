@@ -69,3 +69,17 @@
 ### 2026-02-22: Team Batch Orchestration Complete
 - **Agents deployed:** Link (sync, workspace conversion ✅), Fox (background, GUI implementation ✅), Samus (background, distribution strategy ✅)
 - **Deliverables:** Orchestration logs written for each agent. Session log created. All inbox decisions merged into decisions.md. Inbox directory cleared. Agent history.md files updated with cross-team context. Git commit pending.
+
+### 2026-02-22: AppImage Build in Release Workflow (Issue #20)
+- **Release workflow updated** (`.github/workflows/release.yml`): Added AppImage build job
+- **New job `build-appimage`:** Builds citrust-gui, uses linuxdeploy to package as AppImage
+  - Downloads linuxdeploy-x86_64.AppImage from continuous release
+  - Uses `packaging/citrust-gui.desktop` and `packaging/citrust.png` for desktop integration
+  - Outputs `citrust*.AppImage` as artifact `citrust-gui-appimage`
+- **`build-linux` updated:** Now builds both `citrust-cli` AND `citrust-gui` bare binaries
+  - Uploads separate artifacts: `citrust-linux-x86_64` (CLI) and `citrust-gui-linux-x86_64` (GUI)
+  - GUI deps installed via `$LINUX_GUI_DEPS` env var (same pattern as CI workflow)
+- **`release` job updated:** `needs: [build-linux, build-windows, build-appimage]`, downloads all 4 artifacts
+- **Packaging files:** `packaging/citrust-gui.desktop` (pre-existing), `packaging/citrust.png` (placeholder icon created)
+- **Key pattern:** `env.LINUX_GUI_DEPS` keeps GUI dependency list DRY across CI and release workflows
+- **Release artifacts (total 4):** CLI binary (Linux), GUI binary (Linux), CLI .exe (Windows), GUI AppImage (Linux)

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=citrust
+GenericName=3DS ROM Decryption Tool
+Comment=Decrypt Nintendo 3DS ROM files
+Exec=citrust-gui
+Icon=citrust
+Terminal=false
+Categories=Utility;Game;
+Keywords=3DS;decrypt;ROM;Nintendo;
+StartupWMClass=citrust-gui
