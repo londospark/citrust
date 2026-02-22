@@ -1,6 +1,6 @@
 use eframe::egui;
 use std::path::PathBuf;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 use std::time::Instant;
 
@@ -18,18 +18,15 @@ fn main() -> eframe::Result<()> {
         Box::new(|cc| {
             // Configure large fonts for gamepad-friendly UI
             let mut style = (*cc.egui_ctx.style()).clone();
-            style.text_styles.insert(
-                egui::TextStyle::Heading,
-                egui::FontId::proportional(48.0),
-            );
-            style.text_styles.insert(
-                egui::TextStyle::Body,
-                egui::FontId::proportional(24.0),
-            );
-            style.text_styles.insert(
-                egui::TextStyle::Button,
-                egui::FontId::proportional(28.0),
-            );
+            style
+                .text_styles
+                .insert(egui::TextStyle::Heading, egui::FontId::proportional(48.0));
+            style
+                .text_styles
+                .insert(egui::TextStyle::Body, egui::FontId::proportional(24.0));
+            style
+                .text_styles
+                .insert(egui::TextStyle::Button, egui::FontId::proportional(28.0));
             cc.egui_ctx.set_style(style);
 
             Ok(Box::new(CitrustApp::default()))
@@ -95,14 +92,12 @@ impl CitrustApp {
             if ui
                 .add_sized(button_size, egui::Button::new("📁 Select ROM File"))
                 .clicked()
-            {
-                if let Some(path) = rfd::FileDialog::new()
+                && let Some(path) = rfd::FileDialog::new()
                     .add_filter("3DS ROM", &["3ds"])
                     .set_title("Select 3DS ROM to Decrypt")
                     .pick_file()
-                {
-                    self.selected_file = Some(path);
-                }
+            {
+                self.selected_file = Some(path);
             }
 
             ui.add_space(30.0);
@@ -177,11 +172,7 @@ impl CitrustApp {
                 ui.add_space(40.0);
 
                 // Show file name
-                if let Some(name) = state
-                    .file_path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                {
+                if let Some(name) = state.file_path.file_name().and_then(|n| n.to_str()) {
                     ui.label(format!("File: {}", name));
                 }
 
@@ -306,12 +297,10 @@ impl eframe::App for CitrustApp {
         // Dark theme for SteamOS aesthetic
         ctx.set_visuals(egui::Visuals::dark());
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            match self.screen {
-                Screen::SelectFile => self.show_select_file_screen(ctx, ui),
-                Screen::Decrypting => self.show_decrypting_screen(ctx, ui),
-                Screen::Done => self.show_done_screen(ctx, ui),
-            }
+        egui::CentralPanel::default().show(ctx, |ui| match self.screen {
+            Screen::SelectFile => self.show_select_file_screen(ctx, ui),
+            Screen::Decrypting => self.show_decrypting_screen(ctx, ui),
+            Screen::Done => self.show_done_screen(ctx, ui),
         });
     }
 }

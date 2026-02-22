@@ -12,24 +12,16 @@ use std::path::PathBuf;
 
 use sha2::{Digest, Sha256};
 
-const POKEMON_Y: &str =
-    "0451 - Pokemon Y (Europe) (En,Ja,Fr,De,Es,It,Ko) Decrypted.3ds";
-const OMEGA_RUBY: &str =
-    "1325 - Pokemon Omega Ruby (Europe) (En,Ja,Fr,De,Es,It,Ko) Decrypted.3ds";
+const POKEMON_Y: &str = "0451 - Pokemon Y (Europe) (En,Ja,Fr,De,Es,It,Ko) Decrypted.3ds";
+const OMEGA_RUBY: &str = "1325 - Pokemon Omega Ruby (Europe) (En,Ja,Fr,De,Es,It,Ko) Decrypted.3ds";
 
-const POKEMON_Y_HASH: &str =
-    "360173B4E7B1C76D8C83ACBBA17C575C1E646A506AFB8A41DB762F4ABDAEEF99";
-const OMEGA_RUBY_HASH: &str =
-    "D38FC1031F33380B0297C955488843DF5592DC0459A90E1C0E880560F90174B9";
+const POKEMON_Y_HASH: &str = "360173B4E7B1C76D8C83ACBBA17C575C1E646A506AFB8A41DB762F4ABDAEEF99";
+const OMEGA_RUBY_HASH: &str = "D38FC1031F33380B0297C955488843DF5592DC0459A90E1C0E880560F90174B9";
 
 /// Check if a ROM file exists in the `Test Files/` directory.
 fn test_rom_path(name: &str) -> Option<PathBuf> {
     let path = PathBuf::from("Test Files").join(name);
-    if path.exists() {
-        Some(path)
-    } else {
-        None
-    }
+    if path.exists() { Some(path) } else { None }
 }
 
 /// Compute SHA256 hash of a file, returning uppercase hex string.
