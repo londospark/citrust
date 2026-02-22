@@ -68,3 +68,7 @@
   - `src/gui.rs` (full GUI application, 270+ LOC)
   - Modified `Cargo.toml` (added `[features]`, optional deps, `[[bin]]` section)
 
+
+### Phase 4 GUI Completion: 2026-02-22
+
+Full egui/eframe GUI implemented with 3-screen workflow (select → decrypt → done), gamepad-friendly 1280x800 layout, dark theme, large fonts/buttons for Steam Deck. Background threading for decryption with real-time progress (section tracking, elapsed time). File picker via rfd XDG Desktop Portal backend. Keyboard navigation (Tab/Enter) for Steam Input gamepad mapping. Both CLI and GUI binaries compile successfully (1.6 MB and 9.2 MB respectively). Manual UX testing pending on real ROM + hardware. Next: Phase 4 integration workspace split (#17), then direct gilrs gamepad input enhancement.

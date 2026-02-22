@@ -46,3 +46,14 @@
 - **Issue assignments**: Link (core dev) owns #1–#6, #10–#11, #13–#15; Toad (tester) owns #7–#9, #12, #16; Fox (GUI) owns #18–#19; Samus (lead) owns #17, #20, #21
 - **Dependencies tracked in issue bodies**: #5 depends on #1–#4; #6 depends on #5; #7–#9 depend on #1–#6; Phase 2/3/4 issues chain correctly
 - **Key note**: Test ROMs are ENCRYPTED (NoCrypto=False) despite "Decrypted" filenames — documented in test issues #7, #8
+
+### 2026-02-22: GitHub Actions CI & Release Automation (Issue #21)
+- **CI workflow** (`.github/workflows/ci.yml`): 4 parallel jobs (check/test/clippy/fmt) on push/PR to master
+  - Infrastructure: ubuntu-latest, dtolnay/rust-toolchain@stable, Swatinem/rust-cache@v2
+- **Release workflow** (`.github/workflows/release.yml`): Triggered on version tags (v*)
+  - build-linux: x86_64-unknown-linux-gnu on ubuntu-latest
+  - build-windows: x86_64-pc-windows-msvc on windows-latest
+  - release: Creates GitHub Release with both binaries, auto-generated notes via softprops/action-gh-release@v2
+- **Key decisions**: Latest stable Rust, dtolnay toolchain for simplicity, separate platform builds for native toolchains, Swatinem cache for speed, artifact naming pattern (citrust-{platform}-{arch})
+- **Scope**: Owns .github/workflows/ only; no Cargo.toml or src/ changes
+- **Next**: First version tag (v0.1.0) to validate release automation

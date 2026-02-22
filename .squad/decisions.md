@@ -221,3 +221,149 @@ Full project architecture for citrust Rust port:
 4. Document exact plaintext/ciphertext pairs
 
 ---
+
+## 2026-02-22: Unit Test Architecture Decision
+
+**By:** Toad (Tester)  
+**Date:** 2026-02-22  
+**Status:** Implemented  
+**Category:** Testing
+
+Unit tests for Phase 1 modules (keys, crypto, ncsd, ncch) are implemented as inline `#[cfg(test)]` modules within each source file, not in a separate `tests/` directory.
+
+**Rationale:**
+- **Locality:** Tests are adjacent to the code they test, making them easier to maintain
+- **Access:** Can test private functions and internal implementation details
+- **Convention:** Standard Rust practice for unit tests (integration tests go in `tests/`)
+
+**Test Statistics:**
+- **Total tests:** 19 (all passing)
+- **keys.rs:** 3 tests (method mapping, constants validation, flag conversion)
+- **crypto.rs:** 8 tests (rol128 edge cases, key derivation, AES-CTR, conversions)
+- **ncsd.rs:** 4 tests (header parsing, magic validation, sector size, partition helpers)
+- **ncch.rs:** 4 tests (header parsing, crypto detection, flags, IV construction)
+
+**Benchmark Infrastructure:**
+- **criterion benchmarks** (benches/crypto_bench.rs):
+  - rol128 throughput (small/large shifts)
+  - derive_normal_key throughput
+  - aes_ctr_decrypt throughput (1MB and 16MB buffers)
+  - Full key derivation pipeline (KeyX → NormalKey)
+- **PowerShell comparison script** (benches/compare.ps1):
+  - Takes ROM path as argument
+  - Copies ROM twice (Rust/Python)
+  - Times both decrypters
+  - SHA256-verifies outputs match
+  - Reports speedup ratio
+  - Cleans up temporary files
+
+---
+
+## 2026-02-22: SIMD/AES-NI Optimization Results (Issues #10 & #11)
+
+**By:** Link (Core Dev)  
+**Date:** 2026-02-22  
+**Status:** Implemented  
+**Category:** Performance
+
+**Test Environment:**
+- **Test ROM:** Pokemon Y (1.75GB encrypted)
+- **CPU:** AMD Ryzen (native AES-NI support)
+- **Configuration:** Windows, Release build
+
+**Issue #10: AES-NI Hardware Acceleration**
+- The `aes` 0.8 crate already uses runtime CPU feature detection via `cpufeatures` dependency
+- Created `.cargo/config.toml` to enable all native CPU features including AES-NI, AVX, SSE4.2
+- **Result:** 1.19x speedup (2.34s → 1.97s) with zero code changes
+
+**Issue #11: AES-CTR Chunk Size Tuning**
+- Benchmarked RomFS chunks from 2MB to 64MB
+- **Key findings:** 2–8MB range performs identically (~1.48s); 4MB selected for consistency (σ=0.04s)
+- **Original 16MB:** 32% slower (1.96s vs 1.48s)
+- **Large chunks:** 32MB+ significantly degrade (cache pressure)
+- **Change:** decrypt.rs line 279: `16 * 1024 * 1024` → `4 * 1024 * 1024`
+- **ExeFS:** 1MB chunks unchanged (already optimal)
+
+**Combined Results:**
+| Phase | Configuration | Time | Improvement |
+|-------|--------------|------|-------------|
+| Original | 16MB chunks, no target-cpu | 2.34s | baseline |
+| + AES-NI | 16MB chunks, target-cpu=native | 1.97s | 1.19x |
+| + Chunk tuning | 4MB chunks, target-cpu=native | 1.56s | 1.50x |
+
+**Final speedup:** 1.50x over baseline (2.34s → 1.56s)
+
+**Verification:** All configurations tested 3–5 iterations; every run SHA256-verified for byte-identical output.
+
+---
+
+## 2026-02-22: GUI Implementation Complete (Issues #18 & #19)
+
+**By:** Fox (GUI Dev)  
+**Date:** 2026-02-22  
+**Status:** Implemented  
+**Category:** Implementation
+
+Completed full egui/eframe GUI implementation for citrust with gamepad-friendly design targeting SteamOS.
+
+**Architecture:**
+- Optional `gui` feature with `eframe` and `rfd` dependencies
+- Separate binary `citrust-gui` (9.2 MB) — CLI unaffected (1.6 MB)
+- Background threading for decryption with `mpsc::channel` progress updates
+- Three-screen workflow: File Selection → Decrypting → Done
+
+**UI Design (Gamepad-Friendly):**
+- Dark theme matching SteamOS aesthetic
+- Large fonts: 48px heading, 28px buttons, 24px body text
+- Large hit targets: 400x80px buttons (minimum)
+- 1280x800 default window (Steam Deck native resolution)
+- Full keyboard navigation (Tab/Enter) for gamepad mapping via Steam Input
+
+**Screen Flow:**
+1. **Select File:** Title, "Select ROM File" button → rfd file dialog, shows selected path
+2. **Decrypting:** File name, encryption method, real-time progress log, section tracker, elapsed time
+3. **Done:** Success message, "Decrypt Another" and "Quit" buttons
+
+**Files Modified:**
+- **Created:** `src/gui.rs` (270+ LOC)
+- **Modified:** `Cargo.toml` (added `[features]`, optional deps, `[[bin]]` section)
+
+**Testing Status:**
+- ✅ CLI build unaffected (1.6 MB)
+- ✅ GUI builds with `--features gui`
+- ✅ Both binaries compile successfully
+- ⚠️ Manual UX testing pending (requires real ROM + hardware/SteamOS)
+
+---
+
+## 2026-02-22: GitHub Actions CI & Release Pipeline (Issue #21)
+
+**By:** Samus (Lead)  
+**Date:** 2026-02-22  
+**Status:** Implemented  
+**Category:** Infrastructure
+
+Implemented complete GitHub Actions CI and release automation for citrust.
+
+**CI Workflow (`.github/workflows/ci.yml`):**
+- Triggered on every push to `master` and pull requests to `master`
+- Jobs: **check** (cargo check), **test** (cargo test), **clippy** (cargo clippy -- -D warnings), **fmt** (cargo fmt --check)
+- Infrastructure: ubuntu-latest, dtolnay/rust-toolchain@stable, Swatinem/rust-cache@v2
+
+**Release Workflow (`.github/workflows/release.yml`):**
+- Triggered on version tags (v*)
+- **build-linux:** x86_64-unknown-linux-gnu on ubuntu-latest
+- **build-windows:** x86_64-pc-windows-msvc on windows-latest
+- **release:** Creates GitHub Release with both binaries, auto-generated release notes
+
+**Technical Decisions:**
+- Use latest stable Rust for security updates
+- dtolnay/rust-toolchain for lightweight setup
+- Separate Linux/Windows builds ensure native toolchains
+- Windows build on windows-latest (native MSVC, no cross-compile)
+- Artifact naming: `citrust-{platform}-{arch}` for clarity
+- Swatinem cache speeds up CI via dependency caching
+
+**Scope:** Owns `.github/workflows/` directory only; does not modify Cargo.toml or source files.
+
+---
