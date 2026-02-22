@@ -24,3 +24,12 @@
 - **Gareth preference**: Three phases benchmarked against Python — (1) simple, (2) SIMD, (3) multi-threaded
 - **Encrypt support**: Include in Phase 1 — validates crypto, replaces Python encrypter for test fixtures
 - **Double-layer crypto**: ExeFS `.code` section uses two keys (NormalKey + NormalKey2C) for 7.x/9.x crypto — most subtle part of the port
+
+### 2026-02-22: GitHub Project Infrastructure Setup
+- **Labels created** (20 total): 4 phase labels, 7 module labels, 4 type labels, 5 squad labels
+- **Issues created** (#1–#21): Phase 1 (#1–#9), Phase 2 (#10–#12), Phase 3 (#13–#16), Phase 4 (#17–#20), CI (#21)
+- **Milestones created** (4): Phase 1 (milestone 1, issues #1–#9), Phase 2 (milestone 2, #10–#12), Phase 3 (milestone 3, #13–#16), Phase 4 (milestone 4, #17–#20)
+- **Project board**: "citrust Roadmap" (project #6) — all 21 issues added
+- **Issue assignments**: Link (core dev) owns #1–#6, #10–#11, #13–#15; Toad (tester) owns #7–#9, #12, #16; Fox (GUI) owns #18–#19; Samus (lead) owns #17, #20, #21
+- **Dependencies tracked in issue bodies**: #5 depends on #1–#4; #6 depends on #5; #7–#9 depend on #1–#6; Phase 2/3/4 issues chain correctly
+- **Key note**: Test ROMs are ENCRYPTED (NoCrypto=False) despite "Decrypted" filenames — documented in test issues #7, #8

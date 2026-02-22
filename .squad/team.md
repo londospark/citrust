@@ -17,3 +17,9 @@
 | Toad | Tester | Tests, edge cases, decryption correctness | 🧪 |
 | Scribe | Scribe | Memory, decisions, session logs | 📋 |
 | Ralph | Work Monitor | Work queue, backlog, keep-alive | 🔄 |
+
+## Issue Source
+
+- **Repository:** londospark/citrust
+- **Connected:** 2026-02-22
+- **Project Board:** citrust Roadmap
