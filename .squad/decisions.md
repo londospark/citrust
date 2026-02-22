@@ -472,3 +472,109 @@ Implemented complete GitHub Actions CI and release automation for citrust.
 **Scope:** Owns `.github/workflows/` directory only; does not modify Cargo.toml or source files.
 
 ---
+
+## 2026-02-22: AppImage Packaging for citrust-gui
+
+**By:** Fox (GUI Dev)  
+**Date:** 2026-02-22  
+**Status:** Implemented  
+**Category:** Infrastructure  
+**Issue:** #20
+
+Created AppImage packaging infrastructure in `packaging/` directory for the GUI-only application (`citrust-gui`).
+
+**Key Decisions:**
+1. **GUI-only AppImage:** The AppImage packages only `citrust-gui`, not the CLI. CLI users download the standalone binary.
+2. **linuxdeploy tooling:** Uses `linuxdeploy` (continuous release) to build the AppImage. No GTK plugin needed since egui/glow renders via OpenGL natively — no GTK runtime dependency.
+3. **Self-contained build script:** `build-appimage.sh` auto-downloads and caches linuxdeploy, accepts the binary path as the only argument. Suitable for CI and local use.
+4. **Placeholder icon fallback:** Script generates a minimal 1×1 PNG placeholder if `packaging/citrust.png` is missing, so CI won't fail before a real icon is provided.
+5. **AppStream ID:** `io.github.londospark.citrust` — follows reverse-DNS convention for the GitHub org.
+
+**Files Created:**
+- `packaging/citrust-gui.desktop` — Desktop entry
+- `packaging/io.github.londospark.citrust.metainfo.xml` — AppStream metadata
+- `packaging/build-appimage.sh` — Build script
+- `packaging/README.md` — Documentation and icon requirements
+
+**CI Integration:** The release workflow (`release.yml`) includes a step that builds the GUI binary and runs the build script.
+
+**Action Required:** A 256×256 PNG icon is needed at `packaging/citrust.png` before production release.
+
+---
+
+## 2026-02-22: AppImage in Release Pipeline
+
+**By:** Samus (Lead)  
+**Date:** 2026-02-22  
+**Status:** Implemented  
+**Category:** Infrastructure
+
+Added AppImage packaging to the GitHub Actions release workflow. Every tagged release (v*) now produces 4 artifacts:
+
+1. `citrust` — Linux CLI binary (x86_64)
+2. `citrust-gui` — Linux GUI binary (x86_64, bare)
+3. `citrust.exe` — Windows CLI binary (x86_64)
+4. `citrust-gui-*.AppImage` — Linux GUI AppImage (portable, zero-install)
+
+**Key Decisions:**
+1. **Separate `build-appimage` job** rather than building AppImage in `build-linux` — keeps concerns separated and allows parallel execution
+2. **linuxdeploy continuous release** for AppImage tooling — industry standard, no pinned version (tracks upstream)
+3. **`LINUX_GUI_DEPS` env var** at workflow level — matches CI workflow pattern, keeps dep list DRY
+4. **`build-linux` builds both CLI and GUI** — one job, two artifacts, shares the Rust cache
+5. **Desktop file and icon in `packaging/`** — standard location for Linux packaging assets
+
+**Files Changed:**
+- `.github/workflows/release.yml` — added `build-appimage` job, updated `build-linux` and `release` jobs
+- `packaging/citrust.png` — placeholder icon (to be replaced with proper branding)
+
+---
+
+## 2026-07: Content-Based Decryption Detection
+
+**By:** Link (Core Dev)  
+**Date:** 2026-07  
+**Status:** Implemented  
+**Category:** Bug Fix / Robustness
+
+**Problem:** Some 3DS ROM dumps are already decrypted but have the `NoCrypto` flag (`flags[7] & 0x04`) not set. This causes citrust to treat them as encrypted and apply AES-CTR — which, being a symmetric XOR cipher, actually **encrypts** the plaintext data.
+
+**Solution:** Added content-based detection in `decrypt.rs` via `is_content_decrypted()`:
+1. **Primary check:** Read first 8 bytes of ExeFS region (filename table). Decrypted entries are valid ASCII (`.code\0\0\0`, `banner\0\0`, etc.). Encrypted data is random bytes.
+2. **Fallback:** If no ExeFS, check first 8 bytes of ExHeader (codeset name field) for valid ASCII.
+3. **ASCII definition:** Bytes in range `0x20–0x7E` (printable) or `0x00` (null padding).
+
+When detected, all AES-CTR operations are skipped and only the NoCrypto flag is patched.
+
+**Trade-offs:**
+- **False positive risk:** ~0.4% chance that 8 random encrypted bytes all happen to be valid ASCII. Acceptable — encrypted ExeFS filenames being all-ASCII is astronomically unlikely in practice.
+- **No false negatives:** Decrypted ExeFS entries *always* contain valid ASCII filenames.
+- **Zero performance cost:** Single 8-byte read per partition, only reached when `NoCrypto` is not set.
+
+**Files Changed:** `crates/citrust-core/src/decrypt.rs` — added `is_content_decrypted()` (public) and integrated into `decrypt_rom()` flow
+
+**Verification:** All 19 unit tests pass. No functional changes to normal encrypted ROM processing.
+
+---
+
+## 2026-07: Reverse NoCrypto Detection
+
+**By:** Link (Core Dev)  
+**Date:** 2026-07  
+**Status:** Implemented  
+**Category:** Robustness
+
+**Decision:** When `NoCrypto` flag is set on a partition, verify with `is_content_decrypted()`:
+1. **NoCrypto + content is plaintext** → skip decryption (as before), log "Already Decrypted ✓"
+2. **NoCrypto + content is encrypted** → clear NoCrypto bit, recover backup crypto_method from NCSD offset `0x1188 + (p * 8) + 3`, re-parse NCCH header, proceed with full decryption
+
+**Rationale:** ROMs that were partially processed or had flags incorrectly set can have NoCrypto=True while the actual content remains encrypted. Without this check, these ROMs would be silently skipped, leaving the user with an undecrypted file that appears to be decrypted.
+
+**Backup Flags:** The NCSD header stores backup partition flags at offset 0x1188 (8 bytes per partition). When NoCrypto was set, the original flags[3] (crypto_method) might have been zeroed. The backup at `0x1188 + (p * 8) + 3` preserves the original crypto_method.
+
+**Impact:**
+- **File changed:** `crates/citrust-core/src/decrypt.rs`
+- **Test added:** `test_decrypt_detects_encrypted_despite_nocrypto_flag`
+- **All 25 unit tests pass**
+- No changes to public API or other modules
+
+---

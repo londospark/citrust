@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+env:
+  LINUX_GUI_DEPS: libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libgtk-3-dev
+  RUSTFLAGS: "-C target-cpu=x86-64"
+
 jobs:
   build-linux:
     name: Build Linux
@@ -18,11 +22,17 @@ jobs:
         with:
           targets: x86_64-unknown-linux-gnu
       - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y $LINUX_GUI_DEPS
       - run: cargo build --release --target x86_64-unknown-linux-gnu -p citrust-cli
+      - run: cargo build --release --target x86_64-unknown-linux-gnu -p citrust-gui
       - uses: actions/upload-artifact@v4
         with:
           name: citrust-linux-x86_64
           path: target/x86_64-unknown-linux-gnu/release/citrust
+      - uses: actions/upload-artifact@v4
+        with:
+          name: citrust-gui-linux-x86_64
+          path: target/x86_64-unknown-linux-gnu/release/citrust-gui
 
   build-windows:
     name: Build Windows
@@ -39,9 +49,37 @@ jobs:
           name: citrust-windows-x86_64.exe
           path: target\x86_64-pc-windows-msvc\release\citrust.exe
 
+  build-appimage:
+    name: Build AppImage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y $LINUX_GUI_DEPS
+      - run: cargo build --release --target x86_64-unknown-linux-gnu -p citrust-gui
+      - name: Download linuxdeploy
+        run: |
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+      - name: Build AppImage
+        run: |
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --desktop-file packaging/citrust-gui.desktop \
+            --icon-file packaging/citrust.png \
+            --executable target/x86_64-unknown-linux-gnu/release/citrust-gui \
+            --output appimage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: citrust-gui-appimage
+          path: citrust*.AppImage
+
   release:
     name: Create Release
-    needs: [build-linux, build-windows]
+    needs: [build-linux, build-windows, build-appimage]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +89,15 @@ jobs:
           path: artifacts/
       - uses: actions/download-artifact@v4
         with:
+          name: citrust-gui-linux-x86_64
+          path: artifacts/
+      - uses: actions/download-artifact@v4
+        with:
           name: citrust-windows-x86_64.exe
+          path: artifacts/
+      - uses: actions/download-artifact@v4
+        with:
+          name: citrust-gui-appimage
           path: artifacts/
       - uses: softprops/action-gh-release@v2
         with:
