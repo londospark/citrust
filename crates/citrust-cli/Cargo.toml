@@ -10,4 +10,4 @@ path = "src/main.rs"
 [dependencies]
 citrust-core = { path = "../citrust-core" }
 clap = { version = "4", features = ["derive"] }
-indicatif = "0.17"
+indicatif = "0.18"
