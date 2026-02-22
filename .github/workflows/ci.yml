@@ -8,6 +8,7 @@ on:
 
 env:
   LINUX_GUI_DEPS: libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libgtk-3-dev
+  RUSTFLAGS: "-C target-cpu=x86-64"
 
 jobs:
   check:
