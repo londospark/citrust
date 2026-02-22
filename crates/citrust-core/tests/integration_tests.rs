@@ -61,7 +61,7 @@ fn decrypt_pokemon_y_matches_known_hash() {
     let tmp = PathBuf::from("test-fixtures").join("temp_pokemon_y.3ds");
     fs::copy(&src, &tmp).expect("Failed to copy ROM to temp file");
 
-    let result = citrust::decrypt::decrypt_rom(&tmp, |msg| {
+    let result = citrust_core::decrypt::decrypt_rom(&tmp, |msg| {
         eprintln!("{msg}");
     });
     assert!(result.is_ok(), "Decryption failed: {:?}", result.err());
@@ -82,7 +82,7 @@ fn decrypt_omega_ruby_matches_known_hash() {
     let tmp = PathBuf::from("test-fixtures").join("temp_omega_ruby.3ds");
     fs::copy(&src, &tmp).expect("Failed to copy ROM to temp file");
 
-    let result = citrust::decrypt::decrypt_rom(&tmp, |msg| {
+    let result = citrust_core::decrypt::decrypt_rom(&tmp, |msg| {
         eprintln!("{msg}");
     });
     assert!(result.is_ok(), "Decryption failed: {:?}", result.err());
@@ -104,11 +104,11 @@ fn decrypt_already_decrypted_is_noop() {
     fs::copy(&src, &tmp).expect("Failed to copy ROM to temp file");
 
     // First decryption
-    citrust::decrypt::decrypt_rom(&tmp, |_| {}).expect("First decryption failed");
+    citrust_core::decrypt::decrypt_rom(&tmp, |_| {}).expect("First decryption failed");
     let hash_after_first = sha256_file(&tmp);
 
     // Second decryption — should detect NoCrypto flag and skip all partitions
-    citrust::decrypt::decrypt_rom(&tmp, |_| {}).expect("Second decryption failed");
+    citrust_core::decrypt::decrypt_rom(&tmp, |_| {}).expect("Second decryption failed");
     let hash_after_second = sha256_file(&tmp);
 
     let _ = fs::remove_file(&tmp);
@@ -127,7 +127,7 @@ fn ncsd_header_from_real_rom() {
 
     let mut file = fs::File::open(&src).expect("Failed to open ROM");
     let ncsd =
-        citrust::ncsd::NcsdHeader::parse(&mut file).expect("Failed to parse NCSD header");
+        citrust_core::ncsd::NcsdHeader::parse(&mut file).expect("Failed to parse NCSD header");
 
     assert!(ncsd.sector_size >= 0x200, "Sector size too small");
     assert!(
@@ -147,13 +147,13 @@ fn ncch_header_from_real_rom() {
 
     let mut file = fs::File::open(&src).expect("Failed to open ROM");
     let ncsd =
-        citrust::ncsd::NcsdHeader::parse(&mut file).expect("Failed to parse NCSD header");
+        citrust_core::ncsd::NcsdHeader::parse(&mut file).expect("Failed to parse NCSD header");
 
     let part = &ncsd.partitions[0];
     assert!(!part.is_empty(), "First partition is empty");
 
     let part_offset = part.offset_bytes(ncsd.sector_size);
-    let ncch = citrust::ncch::NcchHeader::parse(&mut file, part_offset)
+    let ncch = citrust_core::ncch::NcchHeader::parse(&mut file, part_offset)
         .expect("Failed to parse NCCH header");
 
     assert_ne!(ncch.key_y, 0, "KeyY should be non-zero");

@@ -274,7 +274,7 @@ impl CitrustApp {
         thread::spawn(move || {
             let _ = tx.send(ProgressMessage::Started);
 
-            let result = citrust::decrypt::decrypt_rom(&decrypt_path, |progress_text| {
+            let result = citrust_core::decrypt::decrypt_rom(&decrypt_path, |progress_text| {
                 let _ = tx.send(ProgressMessage::Update(progress_text.to_string()));
             });
 

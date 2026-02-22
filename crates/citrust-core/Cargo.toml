@@ -1,0 +1,20 @@
+[package]
+name = "citrust-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+aes = "0.8"
+ctr = "0.9"
+cipher = "0.4"
+rayon = "1.10"
+thiserror = "2"
+memmap2 = "0.9"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+sha2 = "0.10"
+
+[[bench]]
+name = "crypto_bench"
+harness = false

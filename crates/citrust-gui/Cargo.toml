@@ -1,0 +1,21 @@
+[package]
+name = "citrust-gui"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "citrust-gui"
+path = "src/main.rs"
+
+[dependencies]
+citrust-core = { path = "../citrust-core" }
+
+[dependencies.eframe]
+version = "0.29"
+default-features = false
+features = ["default_fonts", "glow", "wayland", "x11"]
+
+[dependencies.rfd]
+version = "0.15"
+default-features = false
+features = ["xdg-portal"]

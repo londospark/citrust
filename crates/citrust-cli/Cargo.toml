@@ -1,0 +1,13 @@
+[package]
+name = "citrust-cli"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "citrust"
+path = "src/main.rs"
+
+[dependencies]
+citrust-core = { path = "../citrust-core" }
+clap = { version = "4", features = ["derive"] }
+indicatif = "0.17"
