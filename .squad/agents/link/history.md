@@ -40,3 +40,26 @@ Achieved 1.50x final speedup (2.34s → 1.56s baseline) via combined AES-NI + ch
 
 ### 2026-02-22: Team Batch Completion
 - **Orchestration complete.** Fox built full egui/eframe GUI (9.2 MB, 1280x800 Steam Deck native, gamepad-friendly dark theme). Samus completed comprehensive distribution strategy analysis (Flatpak #1, AppImage #2, winget #2b, with detailed roadmap). All decisions merged into `.squad/decisions.md`. Orchestration logs written. Session log created.
+
+### Inazuma ROM Investigation (2026-07)
+- **Root Cause Found: Double-Encryption Bug.** The Inazuma ROM (`Test Files\1706...Decrypted.3ds`) has NoCrypto flag=0 (claims encrypted) but its content is ALREADY plaintext (ExHeader reads "InazumaG", ExeFS has valid `.code`/`banner`/`icon`/`logo` sections). This is a mis-flagged ROM dump — likely decrypted during dump (GodMode9 etc.) without updating the header flag.
+- **Effect:** Both Python (b3DSDecrypt.py) and Rust (citrust) check only the NoCrypto flag bit (`flags[7] & 0x04`). Since it's 0, they "decrypt" the already-decrypted content, which is AES-CTR XOR — effectively RE-ENCRYPTING it. They then set NoCrypto=true. Result: flag says "decrypted" but content is encrypted garbage.
+- **Azahar Error Explained:** Azahar trusts the NoCrypto flag, skips decryption, tries to parse ExHeader → gets encrypted garbage → fails with generic Error (code 1). The `16384` in the log is simply the partition 0 offset (32 MU × 0x200 = 0x4000 = 16384).
+- **All 4 active partitions affected:** P0 (3326 MB main), P1 (4.6 MB), P6 (8.8 MB), P7 (37.9 MB) — all had NoCrypto=false in the original but plaintext content.
+- **Both tools produce identical wrong output** because they make the same mistake — SHA256 match confirms they're identically wrong, not identically correct.
+- **Headers are structurally valid:** NCSD magic ✓, all NCCH magics ✓, partition table offsets/sizes all within file bounds, ExHeader size=1024, flags[3]=0x00 (standard crypto method). No field equals 16384 unexpectedly.
+- **Potential Fix:** Add content validation before decrypting — check if ExHeader starts with valid ASCII (codeset name) or ExeFS has readable section names. If content is already plaintext, skip crypto and just set the flag. This would handle mis-flagged ROM dumps gracefully.
+
+### Content-Based Decryption Detection (2026-07)
+- **Implemented `is_content_decrypted()`** — public function in `decrypt.rs` that checks if a partition's content is already plaintext despite `NoCrypto` flag not being set.
+- **Primary heuristic:** Read first 8 bytes of ExeFS region (filename table entry). If all bytes are valid ASCII (0x20–0x7E) or null (0x00), content is already decrypted. Encrypted data produces random bytes that fail this check with near certainty (probability of false positive: ~(127/256)^8 ≈ 0.4%).
+- **Fallback:** If no ExeFS exists, checks first 8 bytes of ExHeader (codeset name field) using the same ASCII heuristic.
+- **Integration:** Added to `decrypt_rom()` flow — after `is_no_crypto()` check, before key derivation. On detection, skips all AES-CTR operations and only patches flags (same as normal post-decryption flag patching).
+- **Solves:** Mis-flagged ROM dumps (e.g., Inazuma Eleven GO) that were decrypted during dump but didn't get NoCrypto flag set. Previously these would be double-encrypted into garbage.
+
+### Reverse Detection: Encrypted Despite NoCrypto Flag (2026-07)
+- **Problem:** ROMs flagged as decrypted (NoCrypto=True) but actually containing encrypted content. The previous code blindly trusted the NoCrypto flag and skipped decryption.
+- **Fix:** When `is_no_crypto()` is true, now calls `is_content_decrypted()` to verify. If content is plaintext → skip with "Already Decrypted ✓". If content is encrypted → clear NoCrypto bit, recover backup crypto_method from NCSD offset 0x1188+(p*8)+3 if available, re-parse NCCH, and fall through to normal decryption.
+- **Backup flags:** NCSD stores backup partition flags at 0x1188. If the backup has a valid non-zero crypto_method, it's written into the NCCH header before re-parsing. Otherwise defaults to CryptoMethod::Original (0x00).
+- **Implementation:** Minimal change — replaced the 4-line `is_no_crypto()` check block with a `let ncch = if ... else` that either continues (skip) or rebinds `ncch` with corrected flags and falls through. No changes to any other decryption logic.
+- **Test:** `test_decrypt_detects_encrypted_despite_nocrypto_flag` — synthetic ROM with NoCrypto=True + FixedKey + random ExeFS bytes. Verifies warning message is logged, content is modified (decryption applied), and NoCrypto flag is set post-decryption. All 25 tests pass.
