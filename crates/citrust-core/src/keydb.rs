@@ -174,6 +174,44 @@ impl KeyDatabase {
     pub fn is_empty(&self) -> bool {
         self.keys.is_empty()
     }
+
+    /// Write the key database to a file in Citra-compatible format.
+    pub fn save_to_file(&self, path: &Path) -> Result<(), KeyDbError> {
+        use std::io::Write;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(KeyDbError::Io)?;
+        }
+        let mut file = std::fs::File::create(path).map_err(KeyDbError::Io)?;
+        writeln!(file, "# citrust key database").map_err(KeyDbError::Io)?;
+        writeln!(file, "# Auto-saved from imported key file").map_err(KeyDbError::Io)?;
+        let mut entries: Vec<_> = self.keys.iter().collect();
+        entries.sort_by_key(|(k, _)| (*k).clone());
+        for (name, value) in entries {
+            writeln!(file, "{}={:032X}", name, value).map_err(KeyDbError::Io)?;
+        }
+        Ok(())
+    }
+
+    /// Get the default save path for the key database.
+    /// On Linux: ~/.config/citrust/aes_keys.txt
+    /// On Windows: %APPDATA%\citrust\aes_keys.txt
+    pub fn default_save_path() -> Option<PathBuf> {
+        #[cfg(target_os = "windows")]
+        {
+            std::env::var("APPDATA")
+                .ok()
+                .map(|p| PathBuf::from(p).join("citrust").join("aes_keys.txt"))
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            std::env::var("HOME").ok().map(|h| {
+                PathBuf::from(h)
+                    .join(".config")
+                    .join("citrust")
+                    .join("aes_keys.txt")
+            })
+        }
+    }
 }
 
 #[cfg(test)]
@@ -188,20 +226,20 @@ mod tests {
     #[test]
     fn test_parse_valid_multiline() {
         let input = "\
-generator=1FF9E9AAC5FE0408024591DC5D52768A
-slot0x2CKeyX=B98E95CECA3E4D171F76A94DE934C053
-slot0x25KeyX=CEE7D8AB30C00DAE850EF5E382AC5AF3
+generator=AAAABBBBCCCCDDDDEEEE111122223333
+slot0x2CKeyX=0123456789ABCDEF0123456789ABCDEF
+slot0x25KeyX=FEDCBA9876543210FEDCBA9876543210
 ";
         let db = parse(input).unwrap();
         assert_eq!(db.len(), 3);
-        assert_eq!(db.generator(), Some(0x1FF9E9AAC5FE0408024591DC5D52768Au128));
+        assert_eq!(db.generator(), Some(0xAAAABBBBCCCCDDDDEEEE111122223333u128));
         assert_eq!(
             db.get_key_x(0x2C),
-            Some(0xB98E95CECA3E4D171F76A94DE934C053u128)
+            Some(0x0123456789ABCDEF0123456789ABCDEFu128)
         );
         assert_eq!(
             db.get_key_x(0x25),
-            Some(0xCEE7D8AB30C00DAE850EF5E382AC5AF3u128)
+            Some(0xFEDCBA9876543210FEDCBA9876543210u128)
         );
     }
 
@@ -210,10 +248,10 @@ slot0x25KeyX=CEE7D8AB30C00DAE850EF5E382AC5AF3
         let input = "\
 # This is a comment
   
-generator=1FF9E9AAC5FE0408024591DC5D52768A
+generator=AAAABBBBCCCCDDDDEEEE111122223333
 
 # Another comment
-slot0x2CKeyX=B98E95CECA3E4D171F76A94DE934C053
+slot0x2CKeyX=0123456789ABCDEF0123456789ABCDEF
 ";
         let db = parse(input).unwrap();
         assert_eq!(db.len(), 2);
@@ -221,7 +259,7 @@ slot0x2CKeyX=B98E95CECA3E4D171F76A94DE934C053
 
     #[test]
     fn test_parse_with_bom() {
-        let input = "\u{FEFF}generator=1FF9E9AAC5FE0408024591DC5D52768A\n";
+        let input = "\u{FEFF}generator=AAAABBBBCCCCDDDDEEEE111122223333\n";
         let db = parse(input).unwrap();
         assert_eq!(db.len(), 1);
         assert!(db.generator().is_some());
@@ -229,7 +267,7 @@ slot0x2CKeyX=B98E95CECA3E4D171F76A94DE934C053
 
     #[test]
     fn test_error_invalid_hex() {
-        let input = "generator=1FF9E9AAC5FE0408024591DC5D52ZZZZ\n";
+        let input = "generator=AAAABBBBCCCCDDDDEEEE11112222ZZZZ\n";
         let err = parse(input).unwrap_err();
         match err {
             KeyDbError::ParseError { line, reason } => {
@@ -242,7 +280,7 @@ slot0x2CKeyX=B98E95CECA3E4D171F76A94DE934C053
 
     #[test]
     fn test_error_wrong_length() {
-        let input = "generator=1FF9E9AAC5FE04\n";
+        let input = "generator=AAAABBBBCCCC04\n";
         let err = parse(input).unwrap_err();
         match err {
             KeyDbError::ParseError { line, reason } => {
@@ -272,35 +310,35 @@ slot0x2CKeyX=B98E95CECA3E4D171F76A94DE934C053
     #[test]
     fn test_lookup_methods() {
         let input = "\
-slot0x2CKeyX=B98E95CECA3E4D171F76A94DE934C053
+slot0x2CKeyX=0123456789ABCDEF0123456789ABCDEF
 slot0x18KeyY=00000000000000000000000000000001
-slot0x0CKeyN=E7C9FF9D4F5B6F4DC5E2F50E856F0AB2
-common0=D07B337F9CA4385932A2E25723232EB9
-common0N=64C5FD55DD3AD988325BAAEC5243DB98
+slot0x0CKeyN=AABBCCDD11223344AABBCCDD11223344
+common0=55667788AABBCCDD55667788AABBCCDD
+common0N=99001122334455669900112233445566
 ";
         let db = parse(input).unwrap();
         assert_eq!(
             db.get_key_x(0x2C),
-            Some(0xB98E95CECA3E4D171F76A94DE934C053u128)
+            Some(0x0123456789ABCDEF0123456789ABCDEFu128)
         );
         assert_eq!(db.get_key_y(0x18), Some(1u128));
         assert_eq!(
             db.get_key_n(0x0C),
-            Some(0xE7C9FF9D4F5B6F4DC5E2F50E856F0AB2u128)
+            Some(0xAABBCCDD11223344AABBCCDD11223344u128)
         );
         assert_eq!(
             db.get_common(0),
-            Some(0xD07B337F9CA4385932A2E25723232EB9u128)
+            Some(0x55667788AABBCCDD55667788AABBCCDDu128)
         );
         assert_eq!(
             db.get_common_n(0),
-            Some(0x64C5FD55DD3AD988325BAAEC5243DB98u128)
+            Some(0x99001122334455669900112233445566u128)
         );
     }
 
     #[test]
     fn test_missing_key_returns_none() {
-        let input = "generator=1FF9E9AAC5FE0408024591DC5D52768A\n";
+        let input = "generator=AAAABBBBCCCCDDDDEEEE111122223333\n";
         let db = parse(input).unwrap();
         assert_eq!(db.get_key_x(0xFF), None);
         assert_eq!(db.get_key_y(0x00), None);
@@ -309,7 +347,7 @@ common0N=64C5FD55DD3AD988325BAAEC5243DB98
 
     #[test]
     fn test_case_insensitive_key_names() {
-        let input = "Generator=1FF9E9AAC5FE0408024591DC5D52768A\n";
+        let input = "Generator=AAAABBBBCCCCDDDDEEEE111122223333\n";
         let db = parse(input).unwrap();
         assert!(db.generator().is_some());
         assert!(db.get("GENERATOR").is_some());
@@ -319,7 +357,7 @@ common0N=64C5FD55DD3AD988325BAAEC5243DB98
     #[test]
     fn test_duplicate_key_last_wins() {
         let input = "\
-generator=1FF9E9AAC5FE0408024591DC5D52768A
+generator=AAAABBBBCCCCDDDDEEEE111122223333
 generator=00000000000000000000000000000001
 ";
         let db = parse(input).unwrap();
@@ -345,21 +383,21 @@ generator=00000000000000000000000000000001
 
     #[test]
     fn test_mixed_case_hex_values() {
-        let input = "generator=1ff9E9aAc5Fe0408024591Dc5d52768a\n";
+        let input = "generator=aaaaBBBBccccDDDDeeee111122223333\n";
         let db = parse(input).unwrap();
-        assert_eq!(db.generator(), Some(0x1FF9E9AAC5FE0408024591DC5D52768Au128));
+        assert_eq!(db.generator(), Some(0xAAAABBBBCCCCDDDDEEEE111122223333u128));
     }
 
     #[test]
     fn test_whitespace_trimming() {
-        let input = "  generator  =  1FF9E9AAC5FE0408024591DC5D52768A  \n";
+        let input = "  generator  =  AAAABBBBCCCCDDDDEEEE111122223333  \n";
         let db = parse(input).unwrap();
         assert!(db.generator().is_some());
     }
 
     #[test]
     fn test_windows_line_endings() {
-        let input = "generator=1FF9E9AAC5FE0408024591DC5D52768A\r\nslot0x2CKeyX=B98E95CECA3E4D171F76A94DE934C053\r\n";
+        let input = "generator=AAAABBBBCCCCDDDDEEEE111122223333\r\nslot0x2CKeyX=0123456789ABCDEF0123456789ABCDEF\r\n";
         let db = parse(input).unwrap();
         assert_eq!(db.len(), 2);
     }
@@ -377,5 +415,23 @@ generator=00000000000000000000000000000001
         let input = "slot0x2CKeyX=B98E=5CECA3E4D171F76A94DE934C053\n";
         let err = parse(input).unwrap_err();
         assert!(matches!(err, KeyDbError::ParseError { .. }));
+    }
+
+    #[test]
+    fn test_save_and_reload() {
+        let keys_text = "generator=FEDCBA9876543210FEDCBA9876543210\nslot0x2CKeyX=0123456789ABCDEF0123456789ABCDEF\n";
+        let db = KeyDatabase::from_reader(Cursor::new(keys_text)).unwrap();
+
+        let tmp_dir = std::path::PathBuf::from("test-fixtures");
+        let _ = std::fs::create_dir_all(&tmp_dir);
+        let tmp_path = tmp_dir.join("temp_save_test.txt");
+
+        db.save_to_file(&tmp_path).unwrap();
+        let reloaded = KeyDatabase::from_file(&tmp_path).unwrap();
+        let _ = std::fs::remove_file(&tmp_path);
+
+        assert_eq!(db.len(), reloaded.len());
+        assert_eq!(db.generator(), reloaded.generator());
+        assert_eq!(db.get_key_x(0x2C), reloaded.get_key_x(0x2C));
     }
 }

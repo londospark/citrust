@@ -7,7 +7,7 @@ use rayon::prelude::*;
 
 use crate::crypto::aes_ctr_decrypt;
 use crate::keydb::KeyDatabase;
-use crate::keys::{self, CONSTANT, CryptoMethod, KEY_X_2C, Key128};
+use crate::keys::{CryptoMethod, Key128};
 use crate::ncch::NcchHeader;
 use crate::ncsd::NcsdHeader;
 
@@ -90,55 +90,42 @@ fn decrypt_slice(
         });
 }
 
-/// Resolve KeyX for a given crypto method, preferring the external key database if provided.
-fn resolve_key_x(method: CryptoMethod, keydb: Option<&KeyDatabase>) -> Result<u128, Error> {
-    if let Some(db) = keydb {
-        let slot = match method {
-            CryptoMethod::Original => 0x2C,
-            CryptoMethod::Key7x => 0x25,
-            CryptoMethod::Key93 => 0x18,
-            CryptoMethod::Key96 => 0x1B,
-        };
-        db.get_key_x(slot)
-            .ok_or_else(|| Error::KeyNotFound(format!("slot0x{:02X}KeyX", slot)))
-    } else {
-        Ok(keys::key_x_for_method(method))
-    }
+/// Resolve KeyX for a given crypto method from the key database.
+fn resolve_key_x(method: CryptoMethod, keydb: &KeyDatabase) -> Result<u128, Error> {
+    let slot = match method {
+        CryptoMethod::Original => 0x2C,
+        CryptoMethod::Key7x => 0x25,
+        CryptoMethod::Key93 => 0x18,
+        CryptoMethod::Key96 => 0x1B,
+    };
+    keydb
+        .get_key_x(slot)
+        .ok_or_else(|| Error::KeyNotFound(format!("slot0x{:02X}KeyX", slot)))
 }
 
-/// Resolve the generator constant, preferring the external key database if provided.
-fn resolve_constant(keydb: Option<&KeyDatabase>) -> Result<u128, Error> {
-    if let Some(db) = keydb {
-        db.generator()
-            .ok_or_else(|| Error::KeyNotFound("generator".to_string()))
-    } else {
-        Ok(CONSTANT)
-    }
+/// Resolve the generator constant from the key database.
+fn resolve_constant(keydb: &KeyDatabase) -> Result<u128, Error> {
+    keydb
+        .generator()
+        .ok_or_else(|| Error::KeyNotFound("generator".to_string()))
 }
 
 /// Resolve KeyX for slot 0x2C specifically (used for ExHeader/ExeFS base layer).
-fn resolve_key_x_2c(keydb: Option<&KeyDatabase>) -> Result<u128, Error> {
-    if let Some(db) = keydb {
-        db.get_key_x(0x2C)
-            .ok_or_else(|| Error::KeyNotFound("slot0x2CKeyX".to_string()))
-    } else {
-        Ok(KEY_X_2C)
-    }
+fn resolve_key_x_2c(keydb: &KeyDatabase) -> Result<u128, Error> {
+    keydb
+        .get_key_x(0x2C)
+        .ok_or_else(|| Error::KeyNotFound("slot0x2CKeyX".to_string()))
 }
 
 pub fn decrypt_rom(
     path: &Path,
-    keydb: Option<&KeyDatabase>,
+    keydb: &KeyDatabase,
     mut on_progress: impl FnMut(&str),
 ) -> Result<(), Error> {
-    if let Some(db) = keydb {
-        on_progress(&format!(
-            "Using external key database ({} keys loaded)",
-            db.len()
-        ));
-    } else {
-        on_progress("Using built-in keys");
-    }
+    on_progress(&format!(
+        "Using external key database ({} keys loaded)",
+        keydb.len()
+    ));
 
     let file = File::options().read(true).write(true).open(path)?;
     // SAFETY: we are the sole accessor of this file during decryption
@@ -472,6 +459,12 @@ mod tests {
         }
     }
 
+    fn make_test_keydb() -> KeyDatabase {
+        use std::io::Cursor;
+        let keys_text = "generator=FEDCBA9876543210FEDCBA9876543210\nslot0x2CKeyX=00000000000000000000000000000001\n";
+        KeyDatabase::from_reader(Cursor::new(keys_text)).unwrap()
+    }
+
     /// End-to-end: decrypt_rom on a minimal synthetic ROM with already-decrypted content.
     /// Verifies data is not corrupted and NoCrypto flag is set.
     /// Depends on Link's content-detection logic in decrypt_rom().
@@ -527,7 +520,7 @@ mod tests {
             f.write_all(&rom).expect("write temp file");
         }
 
-        let result = decrypt_rom(&tmp_path, None, |msg| {
+        let result = decrypt_rom(&tmp_path, &make_test_keydb(), |msg| {
             eprintln!("  [content-detect] {msg}");
         });
 
@@ -621,7 +614,7 @@ mod tests {
         }
 
         let messages: Mutex<Vec<String>> = Mutex::new(Vec::new());
-        let result = decrypt_rom(&tmp_path, None, |msg| {
+        let result = decrypt_rom(&tmp_path, &make_test_keydb(), |msg| {
             messages.lock().unwrap().push(msg.to_string());
         });
 

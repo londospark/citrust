@@ -48,15 +48,13 @@ cargo build --release -p citrust-gui    # GUI (needs a display server)
 
 Requires **Rust 1.85+** and an **x86_64** CPU (AES-NI recommended for full performance).
 
-## 🔑 Key Setup
+## 🔑 Key Setup (Required)
 
-citrust works out of the box with built-in keys, but you can also provide your own key file for maximum flexibility.
+citrust requires an `aes_keys.txt` file containing your 3DS encryption keys. This is the same format used by Citra, Azahar, and other 3DS emulators — if you already have one, citrust can use it directly.
 
-### Using an external key file
+**The GUI will prompt you to select a key file on first launch.** Once provided, keys are saved automatically and you won't need to do this again.
 
-citrust supports the same `aes_keys.txt` format used by Citra, Azahar, and other 3DS emulators. If you already have one from your emulator, citrust can use it directly.
-
-**Where to place it** (checked in order):
+### Where citrust looks for keys (checked in order):
 
 | Location | Platform |
 |----------|----------|
@@ -67,18 +65,18 @@ citrust supports the same `aes_keys.txt` format used by Citra, Azahar, and other
 | `~/.local/share/azahar-emu/sysdata/aes_keys.txt` | Linux (Azahar) |
 | `%APPDATA%\Citra\sysdata\aes_keys.txt` | Windows (Citra) |
 
-citrust automatically searches these locations on startup. You can also specify a path explicitly with `--keys` (CLI) or the Browse button (GUI).
+You can also specify a path explicitly with `--keys` (CLI) or the Browse button (GUI).
 
 ### Dumping keys from your 3DS
 
-If you need to create an `aes_keys.txt`, you can dump keys from your 3DS hardware using [GodMode9](https://github.com/d0k3/GodMode9). See the [GodMode9 usage guide](https://3ds.hacks.guide/godmode9-usage) for instructions.
+You can dump keys from your 3DS hardware using [GodMode9](https://github.com/d0k3/GodMode9). See the [GodMode9 usage guide](https://3ds.hacks.guide/godmode9-usage) for instructions.
 
 ## 🔧 Usage
 
 ### CLI
 
 ```sh
-citrust path/to/rom.3ds                   # uses auto-detected or built-in keys
+citrust path/to/rom.3ds                   # uses auto-detected key file
 citrust path/to/rom.3ds --keys keys.txt   # use a specific key file
 ```
 
@@ -87,10 +85,11 @@ The ROM is decrypted in-place. citrust auto-detects the encryption method and ha
 ### GUI
 
 1. Launch `citrust-gui`
-2. (Optional) Key file is auto-detected — or click **Browse** to select one
-3. Click **Select ROM File**
-4. Click **Decrypt**
-5. Done
+2. On first run, click **Browse for Key File** and select your `aes_keys.txt`
+3. Keys are saved automatically — you won't see this step again
+4. Click **Select ROM File**
+5. Click **Decrypt**
+6. Done
 
 ## 🏗️ Architecture
 
