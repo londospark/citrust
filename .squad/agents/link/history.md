@@ -8,4 +8,13 @@
 
 ## Learnings
 
-<!-- Append learnings below -->
+### Analysis Phase (Current)
+- **Code Architecture:** b3DSDecrypt.py is a single-pass NCSD/NCCH parser. Decryption happens in-place via AES-CTR. Key derivation is pure math (rol + XOR + add).
+- **Critical Algorithm:** Key derivation `NormalKey = rol((rol(KeyX, 2, 128) ^ KeyY) + Constant, 87, 128)` is the heart of decryption. Constant is hardcoded 3DS hardware value. KeyX selected by partition flags[3].
+- **Encryption Structure:** 3 levels of IV construction: ExHeader (plain counter 0x01), ExeFS (0x02), RomFS (0x03) combined with TitleID. Counter offsets are critical for mid-file reads.
+- **Python 2 Pain:** `long()` for u128, `xrange()` for ranges, ambiguous bytes/string handling. Rust's u128 native type + ranges eliminate much boilerplate.
+- **Binary Parsing:** Extensive struct unpacking with mixed endianness (big-endian keys, little-endian offsets). `byteorder` crate handles cleanly.
+- **File I/O:** In-place modification using dual handles (Python) → Single mutable handle (Rust). Streaming decryption needed for large files (1+ GB).
+- **Key Selection:** 4 retail KeyX slots (0x2C, 0x25, 0x18, 0x1B) based on firmware era. Zero-key (0x01 flag) for special partitions. Re-encryption of .code section for certain firmware transitions.
+- **Crate Selection:** `aes` + `ctr` for crypto, `byteorder` for parsing, native `u128` for math. Minimal dependency footprint.
+- **Testing Focus:** Unit tests for rol/key derivation, IV construction, flag parsing. Integration tests need small ROM or synthetic test data.
