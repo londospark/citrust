@@ -1,11 +1,15 @@
 # benches/compare.ps1
 # Benchmark comparison script: Rust vs Python decryption
 #
-# Usage: .\benches\compare.ps1 "Test Files\Pokemon Y (USA) (Decrypted).3ds"
+# Usage: .\benches\compare.ps1 -RomPath "Test Files\Pokemon Y.3ds"
+#        .\benches\compare.ps1 -RomPath "Test Files\Pokemon Y.3ds" -Label "phase2"
 
 param(
     [Parameter(Mandatory=$true)]
-    [string]$RomPath
+    [string]$RomPath,
+
+    [Parameter(Mandatory=$false)]
+    [string]$Label = ""
 )
 
 # Verify ROM exists
@@ -85,5 +89,34 @@ Write-Host ""
 Write-Host "Cleaning up..." -ForegroundColor Yellow
 Remove-Item $RustCopy -Force
 Remove-Item $PythonCopy -Force
+
+# Record results to results.json (append mode)
+$ResultsFile = ".\benches\results.json"
+$Entry = @{
+    timestamp = (Get-Date -Format "o")
+    rom       = $RomName
+    size_gb   = [math]::Round((Get-Item $RomPath).Length / 1GB, 3)
+    rust_s    = [math]::Round($RustTime, 3)
+    python_s  = [math]::Round($PythonTime, 3)
+    speedup   = [math]::Round($PythonTime / $RustTime, 2)
+    match     = ($RustHash -eq $PythonHash)
+    rust_sha  = $RustHash
+    label     = $Label
+}
+
+if (Test-Path $ResultsFile) {
+    $Existing = Get-Content $ResultsFile -Raw | ConvertFrom-Json
+    if ($Existing -isnot [System.Array]) { $Existing = @($Existing) }
+    $Existing += $Entry
+    $Existing | ConvertTo-Json -Depth 3 | Set-Content $ResultsFile
+} else {
+    @($Entry) | ConvertTo-Json -Depth 3 | Set-Content $ResultsFile
+}
+
+if ($Label) {
+    Write-Host "Results saved to $ResultsFile (label: $Label)" -ForegroundColor Green
+} else {
+    Write-Host "Results saved to $ResultsFile" -ForegroundColor Green
+}
 
 Write-Host "Done!" -ForegroundColor Green
