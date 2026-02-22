@@ -48,6 +48,7 @@ enum ProgressMessage {
 }
 
 enum Screen {
+    KeySetup,
     SelectFile,
     Decrypting,
     Done,
@@ -71,38 +72,84 @@ struct CitrustApp {
     selected_file: Option<PathBuf>,
     decrypt_state: Option<DecryptState>,
     done_state: Option<DoneState>,
-    key_file_path: Option<PathBuf>,
-    key_file_status: String,
+    keydb: Option<KeyDatabase>,
+    key_status: String,
+    key_save_message: Option<String>,
 }
 
 impl Default for CitrustApp {
     fn default() -> Self {
-        let (key_file_path, key_file_status) = match KeyDatabase::search_default_locations() {
-            Some(path) => {
-                let name = path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| path.display().to_string());
-                (Some(path), format!("🔑 Keys: {name}"))
+        let (keydb, key_status, screen) = match KeyDatabase::search_default_locations()
+            .and_then(|path| KeyDatabase::from_file(&path).ok())
+        {
+            Some(db) => {
+                let status = format!("🔑 Keys loaded ({} keys)", db.len());
+                (Some(db), status, Screen::SelectFile)
             }
-            None => (
-                None,
-                "🔑 Keys: Built-in (external aes_keys.txt recommended)".to_string(),
-            ),
+            None => (None, String::new(), Screen::KeySetup),
         };
 
         Self {
-            screen: Screen::SelectFile,
+            screen,
             selected_file: None,
             decrypt_state: None,
             done_state: None,
-            key_file_path,
-            key_file_status,
+            keydb,
+            key_status,
+            key_save_message: None,
         }
     }
 }
 
 impl CitrustApp {
+    fn show_key_setup_screen(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        ui.vertical_centered(|ui| {
+            ui.add_space(100.0);
+
+            ui.heading("🔑 Key Setup Required");
+            ui.add_space(40.0);
+
+            ui.label("citrust needs an aes_keys.txt file to decrypt 3DS ROMs.");
+            ui.add_space(60.0);
+
+            let button_size = egui::vec2(400.0, 80.0);
+            if ui
+                .add_sized(button_size, egui::Button::new("📁 Browse for Key File"))
+                .clicked()
+                && let Some(path) = rfd::FileDialog::new()
+                    .add_filter("Key File", &["txt"])
+                    .set_title("Select aes_keys.txt")
+                    .pick_file()
+            {
+                self.load_and_save_keys(&path);
+            }
+
+            // Show error if invalid file was selected
+            if let Some(msg) = &self.key_save_message
+                && msg.starts_with('❌')
+            {
+                ui.add_space(20.0);
+                ui.label(egui::RichText::new(msg).color(egui::Color32::from_rgb(220, 80, 80)));
+            }
+
+            ui.add_space(30.0);
+
+            ui.label(
+                egui::RichText::new("You can dump keys from your 3DS using GodMode9")
+                    .text_style(egui::TextStyle::Name("Small".into()))
+                    .color(egui::Color32::from_gray(140)),
+            );
+            ui.add_space(8.0);
+            ui.label(
+                egui::RichText::new("See README for setup instructions")
+                    .text_style(egui::TextStyle::Name("Small".into()))
+                    .color(egui::Color32::from_gray(120)),
+            );
+        });
+
+        ctx.request_repaint();
+    }
+
     fn show_select_file_screen(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         ui.vertical_centered(|ui| {
             ui.add_space(100.0);
@@ -138,12 +185,21 @@ impl CitrustApp {
                     self.start_decryption(path.clone());
                 }
             }
+
+            // Show key save toast if present
+            if let Some(msg) = &self.key_save_message {
+                ui.add_space(30.0);
+                ui.label(egui::RichText::new(msg).color(egui::Color32::from_rgb(100, 200, 100)));
+            }
         });
 
         ctx.request_repaint();
     }
 
     fn show_decrypting_screen(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        // Clear toast on screen transition
+        self.key_save_message = None;
+
         // Poll for progress messages and collect state changes
         let mut should_complete = false;
         let mut completion_duration = 0u64;
@@ -281,31 +337,47 @@ impl CitrustApp {
         ctx.request_repaint();
     }
 
+    fn load_and_save_keys(&mut self, path: &std::path::Path) {
+        match KeyDatabase::from_file(path) {
+            Ok(db) => {
+                // Save to config directory for auto-detection on next launch
+                if let Some(save_path) = KeyDatabase::default_save_path() {
+                    if let Err(e) = db.save_to_file(&save_path) {
+                        self.key_save_message =
+                            Some(format!("⚠️ Keys loaded but could not save: {e}"));
+                    } else {
+                        self.key_save_message =
+                            Some("✅ Keys saved — you won't need to do this again".into());
+                    }
+                } else {
+                    self.key_save_message = Some("✅ Keys loaded".into());
+                }
+
+                self.key_status = format!("🔑 Keys loaded ({} keys)", db.len());
+                self.keydb = Some(db);
+                self.screen = Screen::SelectFile;
+            }
+            Err(e) => {
+                self.key_save_message = Some(format!("❌ Invalid key file: {e}"));
+            }
+        }
+    }
+
     fn start_decryption(&mut self, path: PathBuf) {
         let (tx, rx): (Sender<ProgressMessage>, Receiver<ProgressMessage>) = channel();
 
         let decrypt_path = path.clone();
-        let key_path = self.key_file_path.clone();
+        let keydb = self
+            .keydb
+            .clone()
+            .expect("KeyDatabase must be loaded before decryption");
         thread::spawn(move || {
             let _ = tx.send(ProgressMessage::Started);
 
-            let keydb = key_path.and_then(|p| match KeyDatabase::from_file(&p) {
-                Ok(db) => Some(db),
-                Err(e) => {
-                    let _ = tx.send(ProgressMessage::Update(format!(
-                        "Warning: failed to load key file: {e}"
-                    )));
-                    None
-                }
-            });
-
-            let result = citrust_core::decrypt::decrypt_rom(
-                &decrypt_path,
-                keydb.as_ref(),
-                |progress_text| {
+            let result =
+                citrust_core::decrypt::decrypt_rom(&decrypt_path, &keydb, |progress_text| {
                     let _ = tx.send(ProgressMessage::Update(progress_text.to_string()));
-                },
-            );
+                });
 
             match result {
                 Ok(_) => {
@@ -335,14 +407,11 @@ impl CitrustApp {
             .exact_height(36.0)
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
-                    let status_response = ui.label(
-                        egui::RichText::new(&self.key_file_status)
+                    ui.label(
+                        egui::RichText::new(&self.key_status)
                             .text_style(small_style.clone())
                             .color(egui::Color32::from_gray(140)),
                     );
-                    if let Some(path) = &self.key_file_path {
-                        status_response.on_hover_text(path.display().to_string());
-                    }
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui
@@ -358,20 +427,7 @@ impl CitrustApp {
                                 .set_title("Select aes_keys.txt")
                                 .pick_file()
                         {
-                            match KeyDatabase::from_file(&path) {
-                                Ok(_) => {
-                                    let name = path
-                                        .file_name()
-                                        .map(|n| n.to_string_lossy().into_owned())
-                                        .unwrap_or_else(|| path.display().to_string());
-                                    self.key_file_status = format!("🔑 Keys: {name}");
-                                    self.key_file_path = Some(path);
-                                }
-                                Err(e) => {
-                                    self.key_file_status = format!("🔑 Keys: Error — {e}");
-                                    self.key_file_path = None;
-                                }
-                            }
+                            self.load_and_save_keys(&path);
                         }
                     });
                 });
@@ -384,9 +440,13 @@ impl eframe::App for CitrustApp {
         // Dark theme for SteamOS aesthetic
         ctx.set_visuals(egui::Visuals::dark());
 
-        self.show_key_footer(ctx);
+        // Only show key footer when keys are loaded (not on KeySetup screen)
+        if self.keydb.is_some() {
+            self.show_key_footer(ctx);
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| match self.screen {
+            Screen::KeySetup => self.show_key_setup_screen(ctx, ui),
             Screen::SelectFile => self.show_select_file_screen(ctx, ui),
             Screen::Decrypting => self.show_decrypting_screen(ctx, ui),
             Screen::Done => self.show_done_screen(ctx, ui),

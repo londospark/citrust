@@ -113,3 +113,22 @@ Full egui/eframe GUI implemented with 3-screen workflow (select → decrypt → 
   - All existing functionality preserved: auto-detect on startup, Browse dialog with validation, hover tooltip for full path, key file path passed to decryption thread.
 - **Design insight:** `TopBottomPanel` must be added before `CentralPanel` in egui's immediate mode — egui allocates panel space in call order. The footer claims its 36px first, then CentralPanel fills the remainder.
 - **Verification:** `cargo build -p citrust-gui` ✅, `cargo clippy -p citrust-gui -- -D warnings` ✅, `cargo fmt --check -p citrust-gui` ✅
+
+### 2026-07: Mandatory Key File — GUI Redesign
+- **Task:** Redesigned GUI for mandatory external key file (no more built-in key fallback). Key file is now REQUIRED before decryption.
+- **New Screen:** `Screen::KeySetup` — shown when no keys are auto-detected on startup. Prominent centered layout with "🔑 Key Setup Required" heading, explanation text, large Browse button, and GodMode9/README helper text.
+- **App State Changes:**
+  - Replaced `key_file_path: Option<PathBuf>` + `key_file_status: String` with `keydb: Option<KeyDatabase>` + `key_status: String` + `key_save_message: Option<String>`
+  - `KeyDatabase` is now loaded and stored in memory (no re-reading from file on each decrypt)
+  - Cloned into decryption thread — passed as mandatory `&keydb` to `decrypt_rom()`
+- **Key Persistence Flow:** When user browses for a key file:
+  1. Parse with `KeyDatabase::from_file()`
+  2. Save copy to config dir via `KeyDatabase::save_to_file()` + `default_save_path()`
+  3. Show toast: "✅ Keys saved — you won't need to do this again"
+  4. Transition seamlessly to SelectFile screen
+- **Startup Auto-Detection:** `search_default_locations()` → `from_file()` → if found, start on SelectFile with subtle footer; if not, start on KeySetup screen
+- **Footer:** Only shown when keys are loaded (hidden on KeySetup screen). Shows "🔑 Keys loaded (N keys)" in muted 16px text with frameless Browse… to change keys.
+- **Error Handling:** Invalid key file shows red error on KeySetup screen; parse errors don't transition away
+- **Decryption Threading:** KeyDatabase cloned into thread, passed as `&keydb` (mandatory ref, not Option)
+- **Coordinated with Link's core changes:** `decrypt_rom` signature now `keydb: &KeyDatabase` (mandatory), `save_to_file()` and `default_save_path()` already added by Link
+- **Verification:** `cargo check --workspace` ✅, `cargo clippy --workspace -- -D warnings` ✅, `cargo test --workspace` ✅ (41 tests pass)

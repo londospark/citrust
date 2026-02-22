@@ -18,9 +18,9 @@ fn bench_rol128(c: &mut Criterion) {
 }
 
 fn bench_derive_normal_key(c: &mut Criterion) {
-    let key_x = 0x00000000000000000000000000000000u128;
+    let key_x = 0x0123456789ABCDEF0123456789ABCDEFu128;
     let key_y = 0x12345678_9ABCDEF0_FEDCBA98_76543210u128;
-    let constant = 0x00000000000000000000000000000000u128;
+    let constant = 0xFEDCBA9876543210FEDCBA9876543210u128;
 
     c.bench_function("derive_normal_key", |b| {
         b.iter(|| derive_normal_key(black_box(key_x), black_box(key_y), black_box(constant)))
@@ -63,9 +63,9 @@ fn bench_aes_ctr_decrypt(c: &mut Criterion) {
 
 fn bench_key_derivation_pipeline(c: &mut Criterion) {
     c.bench_function("full_key_derivation", |b| {
-        let key_x = 0x00000000000000000000000000000000u128;
+        let key_x = 0x0123456789ABCDEF0123456789ABCDEFu128;
         let key_y = 0x12345678_9ABCDEF0_FEDCBA98_76543210u128;
-        let constant = 0x00000000000000000000000000000000u128;
+        let constant = 0xFEDCBA9876543210FEDCBA9876543210u128;
 
         b.iter(|| {
             let normal_key =

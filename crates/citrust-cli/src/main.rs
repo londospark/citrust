@@ -28,7 +28,7 @@ fn main() {
                     keys_path.display(),
                     db.len()
                 );
-                Some(db)
+                db
             }
             Err(e) => {
                 eprintln!("Error loading key file: {e}");
@@ -43,21 +43,32 @@ fn main() {
                     found_path.display(),
                     db.len()
                 );
-                Some(db)
+                db
             }
             Err(e) => {
                 eprintln!(
                     "Warning: found key file at {} but failed to parse: {e}",
                     found_path.display()
                 );
-                None
+                process::exit(1);
             }
         }
     } else {
-        None
+        eprintln!(
+            "Error: No key file found. citrust requires an aes_keys.txt file for decryption."
+        );
+        eprintln!();
+        eprintln!("Place your aes_keys.txt in one of these locations:");
+        eprintln!("  - ./aes_keys.txt (next to your ROM)");
+        eprintln!("  - ~/.config/citrust/aes_keys.txt (Linux)");
+        eprintln!("  - %APPDATA%\\citrust\\aes_keys.txt (Windows)");
+        eprintln!("  - Or specify with: citrust --keys /path/to/aes_keys.txt");
+        eprintln!();
+        eprintln!("See README.md for key file setup instructions.");
+        process::exit(1);
     };
 
-    if let Err(e) = citrust_core::decrypt::decrypt_rom(&cli.rom, keydb.as_ref(), |msg| {
+    if let Err(e) = citrust_core::decrypt::decrypt_rom(&cli.rom, &keydb, |msg| {
         println!("{msg}");
     }) {
         eprintln!("Error: {e}");

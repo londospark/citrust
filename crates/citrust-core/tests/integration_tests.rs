@@ -7,7 +7,7 @@
 //! that AES-NI acceleration and chunk-size tuning preserve byte-identical output.
 
 use std::fs;
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::path::PathBuf;
 
 use citrust_core::keydb::KeyDatabase;
@@ -54,7 +54,7 @@ fn decrypt_pokemon_y_matches_known_hash() {
     let tmp = PathBuf::from("test-fixtures").join("temp_pokemon_y.3ds");
     fs::copy(&src, &tmp).expect("Failed to copy ROM to temp file");
 
-    let result = citrust_core::decrypt::decrypt_rom(&tmp, None, |msg| {
+    let result = citrust_core::decrypt::decrypt_rom(&tmp, &make_test_keydb(), |msg| {
         eprintln!("{msg}");
     });
     assert!(result.is_ok(), "Decryption failed: {:?}", result.err());
@@ -75,7 +75,7 @@ fn decrypt_omega_ruby_matches_known_hash() {
     let tmp = PathBuf::from("test-fixtures").join("temp_omega_ruby.3ds");
     fs::copy(&src, &tmp).expect("Failed to copy ROM to temp file");
 
-    let result = citrust_core::decrypt::decrypt_rom(&tmp, None, |msg| {
+    let result = citrust_core::decrypt::decrypt_rom(&tmp, &make_test_keydb(), |msg| {
         eprintln!("{msg}");
     });
     assert!(result.is_ok(), "Decryption failed: {:?}", result.err());
@@ -96,12 +96,14 @@ fn decrypt_already_decrypted_is_noop() {
     let tmp = PathBuf::from("test-fixtures").join("temp_noop_test.3ds");
     fs::copy(&src, &tmp).expect("Failed to copy ROM to temp file");
 
+    let keydb = make_test_keydb();
+
     // First decryption
-    citrust_core::decrypt::decrypt_rom(&tmp, None, |_| {}).expect("First decryption failed");
+    citrust_core::decrypt::decrypt_rom(&tmp, &keydb, |_| {}).expect("First decryption failed");
     let hash_after_first = sha256_file(&tmp);
 
     // Second decryption — should detect NoCrypto flag and skip all partitions
-    citrust_core::decrypt::decrypt_rom(&tmp, None, |_| {}).expect("Second decryption failed");
+    citrust_core::decrypt::decrypt_rom(&tmp, &keydb, |_| {}).expect("Second decryption failed");
     let hash_after_second = sha256_file(&tmp);
 
     let _ = fs::remove_file(&tmp);
@@ -157,16 +159,22 @@ fn ncch_header_from_real_rom() {
 // Key database integration tests
 // ---------------------------------------------------------------------------
 
-/// Build a KeyDatabase containing the same keys that are hardcoded in keys.rs.
+/// Try to load a KeyDatabase from test fixtures or default locations.
 fn make_test_keydb() -> KeyDatabase {
-    let keys_text = "\
-generator=00000000000000000000000000000000
-slot0x2CKeyX=00000000000000000000000000000000
-slot0x25KeyX=00000000000000000000000000000000
-slot0x18KeyX=00000000000000000000000000000000
-slot0x1BKeyX=00000000000000000000000000000000
-";
-    KeyDatabase::from_reader(Cursor::new(keys_text)).expect("Failed to parse test key data")
+    // Try to load from test fixture file (gitignored, user must provide)
+    let fixture_path = PathBuf::from("test-fixtures/aes_keys.txt");
+    if fixture_path.exists() {
+        return KeyDatabase::from_file(&fixture_path)
+            .expect("Failed to parse test-fixtures/aes_keys.txt");
+    }
+    // Try default locations
+    if let Some(path) = KeyDatabase::search_default_locations() {
+        return KeyDatabase::from_file(&path)
+            .expect("Failed to parse key file from default location");
+    }
+    panic!(
+        "No key file available for integration tests. Place aes_keys.txt in test-fixtures/ or a default location."
+    );
 }
 
 /// Decrypt Pokemon Y with external keys and verify the hash matches the known-good value.
@@ -180,7 +188,7 @@ fn decrypt_with_external_keys_matches_builtin() {
     let tmp = PathBuf::from("test-fixtures").join("temp_keydb_test.3ds");
     fs::copy(&src, &tmp).expect("Failed to copy ROM to temp file");
 
-    let result = citrust_core::decrypt::decrypt_rom(&tmp, Some(&keydb), |msg| {
+    let result = citrust_core::decrypt::decrypt_rom(&tmp, &keydb, |msg| {
         eprintln!("{msg}");
     });
     assert!(
@@ -198,14 +206,15 @@ fn decrypt_with_external_keys_matches_builtin() {
     );
 }
 
-/// Verify KeyDatabase is correctly populated with expected keys.
+/// Verify KeyDatabase has the expected structure when loaded.
 #[test]
+#[ignore] // Requires aes_keys.txt
 fn keydb_has_expected_keys() {
     let db = make_test_keydb();
-    assert_eq!(db.len(), 5);
-    assert!(db.generator().is_some());
-    assert!(db.get_key_x(0x2C).is_some());
-    assert!(db.get_key_x(0x25).is_some());
-    assert!(db.get_key_x(0x18).is_some());
-    assert!(db.get_key_x(0x1B).is_some());
+    assert!(db.len() >= 5, "Key database should have at least 5 keys");
+    assert!(db.generator().is_some(), "Missing generator key");
+    assert!(db.get_key_x(0x2C).is_some(), "Missing slot0x2CKeyX");
+    assert!(db.get_key_x(0x25).is_some(), "Missing slot0x25KeyX");
+    assert!(db.get_key_x(0x18).is_some(), "Missing slot0x18KeyX");
+    assert!(db.get_key_x(0x1B).is_some(), "Missing slot0x1BKeyX");
 }
