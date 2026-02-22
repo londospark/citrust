@@ -48,22 +48,49 @@ cargo build --release -p citrust-gui    # GUI (needs a display server)
 
 Requires **Rust 1.85+** and an **x86_64** CPU (AES-NI recommended for full performance).
 
+## 🔑 Key Setup
+
+citrust works out of the box with built-in keys, but you can also provide your own key file for maximum flexibility.
+
+### Using an external key file
+
+citrust supports the same `aes_keys.txt` format used by Citra, Azahar, and other 3DS emulators. If you already have one from your emulator, citrust can use it directly.
+
+**Where to place it** (checked in order):
+
+| Location | Platform |
+|----------|----------|
+| `./aes_keys.txt` (next to the ROM or current directory) | All |
+| `~/.config/citrust/aes_keys.txt` | Linux / SteamOS |
+| `%APPDATA%\citrust\aes_keys.txt` | Windows |
+| `~/.local/share/citra-emu/sysdata/aes_keys.txt` | Linux (Citra) |
+| `~/.local/share/azahar-emu/sysdata/aes_keys.txt` | Linux (Azahar) |
+| `%APPDATA%\Citra\sysdata\aes_keys.txt` | Windows (Citra) |
+
+citrust automatically searches these locations on startup. You can also specify a path explicitly with `--keys` (CLI) or the Browse button (GUI).
+
+### Dumping keys from your 3DS
+
+If you need to create an `aes_keys.txt`, you can dump keys from your 3DS hardware using [GodMode9](https://github.com/d0k3/GodMode9). See the [GodMode9 usage guide](https://3ds.hacks.guide/godmode9-usage) for instructions.
+
 ## 🔧 Usage
 
 ### CLI
 
 ```sh
-citrust path/to/rom.3ds
+citrust path/to/rom.3ds                   # uses auto-detected or built-in keys
+citrust path/to/rom.3ds --keys keys.txt   # use a specific key file
 ```
 
-That's it. The ROM is decrypted in-place. citrust auto-detects the encryption method and handles everything.
+The ROM is decrypted in-place. citrust auto-detects the encryption method and handles everything.
 
 ### GUI
 
 1. Launch `citrust-gui`
-2. Click **Select ROM File**
-3. Click **Decrypt**
-4. Done
+2. (Optional) Key file is auto-detected — or click **Browse** to select one
+3. Click **Select ROM File**
+4. Click **Decrypt**
+5. Done
 
 ## 🏗️ Architecture
 
