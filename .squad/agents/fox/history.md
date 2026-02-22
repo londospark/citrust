@@ -76,3 +76,19 @@ Full egui/eframe GUI implemented with 3-screen workflow (select → decrypt → 
 ### 2026-02-22: Team Batch Completion
 - **GUI screenshot captured:** `docs/screenshots/select-file.png` (1296x672) showing initial file selection screen.
 - **All agent batch completed successfully:** Link completed workspace conversion (Issue #17). Samus completed comprehensive distribution strategy analysis with 5-channel prioritized roadmap. Orchestration logs written for each agent. Decisions merged and inbox cleared. Session log created.
+
+### 2026-02-22: AppImage Packaging Infrastructure (Issue #20)
+- **Task:** Created full AppImage packaging infrastructure for citrust-gui (GUI-only, no CLI)
+- **Files created in `packaging/`:**
+  - `citrust-gui.desktop` — FreeDesktop entry, Exec=citrust-gui, Categories=Utility;Game;
+  - `io.github.londospark.citrust.metainfo.xml` — AppStream metadata with app description and release info
+  - `build-appimage.sh` — Self-contained build script using linuxdeploy, accepts binary path as argument
+  - `README.md` — Documents icon requirement and CI usage
+- **Key decisions:**
+  - Uses linuxdeploy (continuous release) for AppImage generation, no GTK plugin needed (egui/glow renders natively)
+  - Script auto-downloads linuxdeploy, caches it for re-runs
+  - Generates minimal placeholder PNG if no icon exists (prevents build failure)
+  - AppDir structure follows FreeDesktop standards: usr/bin, usr/share/icons/hicolor/256x256/apps, usr/share/metainfo
+  - Target: x86_64 architecture (ARCH env var overridable)
+- **CI integration:** Script designed for GitHub Actions; example: `packaging/build-appimage.sh target/x86_64-unknown-linux-gnu/release/citrust-gui`
+- **Blocker:** Real 256x256 PNG icon needed at `packaging/citrust.png` before production release
