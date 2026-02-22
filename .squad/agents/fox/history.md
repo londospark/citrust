@@ -37,3 +37,34 @@
 - No callbacks or complex state machines = faster iteration
 - eframe handles window management, event loop, and rendering backends—developer focuses only on UI logic
 - For a decryption app (I/O-heavy, not graphics-heavy), egui's CPU overhead is negligible
+
+### GUI Implementation (Issues #18 & #19)
+- **Task:** Built full egui/eframe GUI for citrust with 3-screen workflow (select → decrypt → done)
+- **Architecture:** 
+  - Optional `gui` feature in Cargo.toml with eframe and rfd dependencies
+  - Separate binary `citrust-gui` compiled only when `--features gui` enabled
+  - CLI build remains unaffected (1.6 MB binary)
+  - GUI binary is 9.2 MB (includes eframe + egui + winit + rfd)
+- **Threading model:** Background thread runs `decrypt_rom()`, sends progress via `mpsc::channel` to UI thread
+- **UI Design:**
+  - Dark theme (SteamOS aesthetic)
+  - Large fonts (48px heading, 28px buttons, 24px body)
+  - Large hit targets (400x80px buttons minimum) for gamepad use
+  - 1280x800 default window size (native Steam Deck resolution)
+  - Keyboard-navigable (Tab/Enter) — prerequisite for gamepad mapping
+- **File picker:** Uses `rfd` with XDG Desktop Portal backend for native Linux dialogs
+- **Progress display:** Real-time updates showing:
+  - Encryption method detected
+  - Current section (ExHeader/ExeFS/RomFS)
+  - Per-section progress with MB counters
+  - Elapsed time
+  - Scrollable message log (last 10 messages)
+- **Gamepad support strategy:** Rely on Steam Input keyboard mapping initially (Tab/Enter navigation). Future enhancement: direct gamepad via `gilrs` (noted in code comments)
+- **Borrow checker challenge:** Initial attempt to modify `self.decrypt_state` inside the receiver loop failed. Solution: collect state changes in local variables, then apply after releasing the mutable borrow.
+- **Testing:** Both builds verified working:
+  - `cargo build` → CLI-only (1.6 MB)
+  - `cargo build --features gui --bin citrust-gui` → GUI (9.2 MB)
+- **Files created:**
+  - `src/gui.rs` (full GUI application, 270+ LOC)
+  - Modified `Cargo.toml` (added `[features]`, optional deps, `[[bin]]` section)
+

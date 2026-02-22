@@ -8,7 +8,20 @@
 
 ## Learnings
 
-<!-- Append learnings below -->
+### 2026-02-22: GitHub Actions CI & Release Pipeline (Issue #21)
+- **CI workflow** (`.github/workflows/ci.yml`): 4 jobs on push/PR to master
+  - `check`: cargo check (fast fail)
+  - `test`: cargo test (unit tests)
+  - `clippy`: cargo clippy with deny-warnings
+  - `fmt`: cargo fmt --check
+  - All use dtolnay/rust-toolchain@stable, Swatinem/rust-cache@v2, ubuntu-latest
+- **Release workflow** (`.github/workflows/release.yml`): Triggered on version tags (v*)
+  - `build-linux`: x86_64-unknown-linux-gnu, uploads citrust binary
+  - `build-windows`: x86_64-pc-windows-msvc on windows-latest, uploads citrust.exe
+  - `release`: Creates GitHub Release with both artifacts, auto-generated release notes via softprops/action-gh-release@v2
+  - Proper artifact naming, Windows path handling (backslashes in paths), dependency chaining
+- **Key decisions**: Use latest stable Rust, leverage dtolnay toolchain for simplicity, Swatinem cache for speed, actions/v4 versions for stability
+- **Scope**: No Cargo.toml or src/ changes; workflows fully own .github/workflows/
 
 ### 2026-02-22: Port Plan Created
 - **Architecture**: Single crate (lib + bin) for Phases 1–3; workspace split deferred to Phase 4 (GUI)
