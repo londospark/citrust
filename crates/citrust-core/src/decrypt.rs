@@ -6,7 +6,8 @@ use memmap2::MmapMut;
 use rayon::prelude::*;
 
 use crate::crypto::aes_ctr_decrypt;
-use crate::keys::{self, CONSTANT, CryptoMethod, KEY_X_2C, Key128};
+use crate::keydb::KeyDatabase;
+use crate::keys::{CryptoMethod, Key128};
 use crate::ncch::NcchHeader;
 use crate::ncsd::NcsdHeader;
 
@@ -16,6 +17,8 @@ pub enum Error {
     NotNcsd,
     #[error("partition {0}: invalid NCCH header")]
     InvalidNcch(u8),
+    #[error("key not found in database: {0}")]
+    KeyNotFound(String),
     #[error("I/O error: {0}")]
     Io(#[from] io::Error),
 }
@@ -87,7 +90,43 @@ fn decrypt_slice(
         });
 }
 
-pub fn decrypt_rom(path: &Path, mut on_progress: impl FnMut(&str)) -> Result<(), Error> {
+/// Resolve KeyX for a given crypto method from the key database.
+fn resolve_key_x(method: CryptoMethod, keydb: &KeyDatabase) -> Result<u128, Error> {
+    let slot = match method {
+        CryptoMethod::Original => 0x2C,
+        CryptoMethod::Key7x => 0x25,
+        CryptoMethod::Key93 => 0x18,
+        CryptoMethod::Key96 => 0x1B,
+    };
+    keydb
+        .get_key_x(slot)
+        .ok_or_else(|| Error::KeyNotFound(format!("slot0x{:02X}KeyX", slot)))
+}
+
+/// Resolve the generator constant from the key database.
+fn resolve_constant(keydb: &KeyDatabase) -> Result<u128, Error> {
+    keydb
+        .generator()
+        .ok_or_else(|| Error::KeyNotFound("generator".to_string()))
+}
+
+/// Resolve KeyX for slot 0x2C specifically (used for ExHeader/ExeFS base layer).
+fn resolve_key_x_2c(keydb: &KeyDatabase) -> Result<u128, Error> {
+    keydb
+        .get_key_x(0x2C)
+        .ok_or_else(|| Error::KeyNotFound("slot0x2CKeyX".to_string()))
+}
+
+pub fn decrypt_rom(
+    path: &Path,
+    keydb: &KeyDatabase,
+    mut on_progress: impl FnMut(&str),
+) -> Result<(), Error> {
+    on_progress(&format!(
+        "Using external key database ({} keys loaded)",
+        keydb.len()
+    ));
+
     let file = File::options().read(true).write(true).open(path)?;
     // SAFETY: we are the sole accessor of this file during decryption
     let mut mmap = unsafe { MmapMut::map_mut(&file)? };
@@ -166,10 +205,12 @@ pub fn decrypt_rom(path: &Path, mut on_progress: impl FnMut(&str)) -> Result<(),
             }
             (0u128, 0u128)
         } else {
-            let nk2c = crate::crypto::derive_normal_key(KEY_X_2C, key_y, CONSTANT);
+            let constant = resolve_constant(keydb)?;
+            let key_x_2c = resolve_key_x_2c(keydb)?;
+            let nk2c = crate::crypto::derive_normal_key(key_x_2c, key_y, constant);
             let method = ncch.crypto_method().unwrap_or(CryptoMethod::Original);
-            let key_x = keys::key_x_for_method(method);
-            let nk = crate::crypto::derive_normal_key(key_x, key_y, CONSTANT);
+            let key_x = resolve_key_x(method, keydb)?;
+            let nk = crate::crypto::derive_normal_key(key_x, key_y, constant);
             if p == 0 {
                 on_progress(&format!("Encryption Method: {method:?}"));
             }
@@ -418,6 +459,12 @@ mod tests {
         }
     }
 
+    fn make_test_keydb() -> KeyDatabase {
+        use std::io::Cursor;
+        let keys_text = "generator=FEDCBA9876543210FEDCBA9876543210\nslot0x2CKeyX=00000000000000000000000000000001\n";
+        KeyDatabase::from_reader(Cursor::new(keys_text)).unwrap()
+    }
+
     /// End-to-end: decrypt_rom on a minimal synthetic ROM with already-decrypted content.
     /// Verifies data is not corrupted and NoCrypto flag is set.
     /// Depends on Link's content-detection logic in decrypt_rom().
@@ -473,7 +520,7 @@ mod tests {
             f.write_all(&rom).expect("write temp file");
         }
 
-        let result = decrypt_rom(&tmp_path, |msg| {
+        let result = decrypt_rom(&tmp_path, &make_test_keydb(), |msg| {
             eprintln!("  [content-detect] {msg}");
         });
 
@@ -567,7 +614,7 @@ mod tests {
         }
 
         let messages: Mutex<Vec<String>> = Mutex::new(Vec::new());
-        let result = decrypt_rom(&tmp_path, |msg| {
+        let result = decrypt_rom(&tmp_path, &make_test_keydb(), |msg| {
             messages.lock().unwrap().push(msg.to_string());
         });
 

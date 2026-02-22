@@ -27,7 +27,7 @@ NormalKey = ROL128((ROL128(KeyX, 2) ^ KeyY) + Constant, 87)
   - 0x0A → KeyX0x18 (New3DS 9.3)
   - 0x0B → KeyX0x1B (New3DS 9.6)
 - `KeyY`: First 16 bytes of partition RSA signature (offset 0x0 from partition start)
-- `Constant`: `00000000000000000000000000000000`
+- `Constant`: [REDACTED]
 - `NormalKey2C`: Always derived from KeyX0x2C (used for ExHeader + ExeFS table)
 - Special case: `FixedCryptoKey` flag (flags[7] bit 0) → both keys = 0
 

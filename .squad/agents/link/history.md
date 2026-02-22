@@ -63,3 +63,24 @@ Achieved 1.50x final speedup (2.34s → 1.56s baseline) via combined AES-NI + ch
 - **Backup flags:** NCSD stores backup partition flags at 0x1188. If the backup has a valid non-zero crypto_method, it's written into the NCCH header before re-parsing. Otherwise defaults to CryptoMethod::Original (0x00).
 - **Implementation:** Minimal change — replaced the 4-line `is_no_crypto()` check block with a `let ncch = if ... else` that either continues (skip) or rebinds `ncch` with corrected flags and falls through. No changes to any other decryption logic.
 - **Test:** `test_decrypt_detects_encrypted_despite_nocrypto_flag` — synthetic ROM with NoCrypto=True + FixedKey + random ExeFS bytes. Verifies warning message is logged, content is modified (decryption applied), and NoCrypto flag is set post-decryption. All 25 tests pass.
+
+### External Key Database Support (2026-07, feature/external-keys)
+- **Created `keydb.rs`** — Citra-compatible `aes_keys.txt` parser. `KeyDatabase` struct with `HashMap<String, u128>`, parsed from `BufRead` or file path. Supports `from_reader()`, `from_file()`, `search_default_locations()`, and typed lookups (`generator()`, `get_key_x(slot)`, `get_key_y(slot)`, `get_key_n(slot)`, `get_common(idx)`, `get_common_n(idx)`).
+- **Robustness:** Handles BOM, mixed-case hex, whitespace trimming, comments, blank lines, Windows line endings, split-on-first-`=`, duplicate key warnings (last wins). Clear errors with line numbers for invalid hex, wrong length, missing `=`.
+- **Integration:** `decrypt_rom()` signature changed to accept `Option<&KeyDatabase>`. When `Some`, uses external keys via `resolve_key_x()`, `resolve_key_x_2c()`, `resolve_constant()` helpers. When `None`, falls back to hardcoded constants exactly as before. Added `Error::KeyNotFound(String)` variant.
+- **CLI:** Added `--keys <path>` optional clap argument. If specified, loads from that path (hard error if invalid). Otherwise tries `search_default_locations()`. Passes `Option<&KeyDatabase>` to `decrypt_rom`.
+- **Default locations:** `./aes_keys.txt`, `~/.config/citrust/aes_keys.txt` (Linux), `%APPDATA%\citrust\aes_keys.txt` (Windows), Citra/Azahar sysdata paths.
+- **Test coverage:** 17 new unit tests in `keydb.rs` (valid parsing, comments, BOM, invalid hex, wrong length, no `=`, lookups, missing keys, case insensitivity, duplicates, empty file, default locations, mixed case hex, whitespace, Windows CRLF, file not found, split-on-first-`=`).
+- **GUI note:** `decrypt_rom` signature change requires GUI update (Fox's domain). GUI not included in build verification scope.
+- **All 42 unit tests pass.** 5 integration tests compile (ignored). Zero clippy warnings.
+
+### Hardcoded Key Removal (2026-07)
+- **Removed all 9 key constants** from `keys.rs`: 4 retail KeyX slots (0x2C, 0x25, 0x18, 0x1B), 4 dev KeyX slots, and the generator constant. Also removed `key_x_for_method()` function and 2 tests that referenced removed keys. Kept `Key128` type, `CryptoMethod` enum, and `from_flag()`.
+- **Made KeyDatabase mandatory** in `decrypt_rom()`: signature changed from `Option<&KeyDatabase>` to `&KeyDatabase`. All `resolve_*` helpers simplified to take `&KeyDatabase` directly, removing fallback branches to hardcoded keys.
+- **CLI now requires keys**: If `--keys` not provided, searches default locations. If no key file found anywhere, prints helpful error with location hints and exits. No more silent fallback to built-in keys.
+- **Integration tests load from file**: `make_test_keydb()` now loads from `test-fixtures/aes_keys.txt` or default locations, panicking if unavailable. `keydb_has_expected_keys` test is now `#[ignore]` since it requires actual keys.
+- **Benchmarks use arbitrary values**: Replaced real key hex values in `crypto_bench.rs` with `0x0123456789ABCDEF...` test values. Benchmarks test algorithm performance, not key correctness.
+- **KeyDB parser tests cleaned**: All 18 keydb.rs unit tests now use arbitrary hex values (e.g., `AAAABBBBCCCCDDDDEEEE111122223333`) instead of real 3DS keys.
+- **Added `save_to_file()` and `default_save_path()`** to `KeyDatabase`: saves in Citra-compatible format with sorted entries. Cross-platform config paths (Linux `~/.config/citrust/`, Windows `%APPDATA%\citrust\`). New `test_save_and_reload` test validates round-trip.
+- **GUI fixes (minimal)**: Fixed `show_key_footer` to use correct field names (`key_status`/`keydb` instead of non-existent `key_file_status`/`key_file_path`). Added `KeySetup` screen routing. Fixed collapsible-if clippy warning. These were pre-existing compile errors from Fox's incomplete work — my changes to `decrypt_rom`'s signature just exposed them.
+- **All 41 unit tests pass.** 7 integration tests compile (ignored). Zero clippy warnings. Zero references to real 3DS key hex values in source.

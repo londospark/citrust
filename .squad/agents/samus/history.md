@@ -83,3 +83,12 @@
 - **Packaging files:** `packaging/citrust-gui.desktop` (pre-existing), `packaging/citrust.png` (placeholder icon created)
 - **Key pattern:** `env.LINUX_GUI_DEPS` keeps GUI dependency list DRY across CI and release workflows
 - **Release artifacts (total 4):** CLI binary (Linux), GUI binary (Linux), CLI .exe (Windows), GUI AppImage (Linux)
+
+### 2026-07-16: v0.2.0 Release Cut (Issue #20 Closed)
+- **Issue #20 closed:** AppImage packaging delivered via PR #23, commented with deliverables and follow-up items
+- **Version bumped:** All 3 crates (citrust-core, citrust-cli, citrust-gui) from 0.1.0 → 0.2.0
+- **Metainfo updated:** Added v0.2.0 release entry to `packaging/io.github.londospark.citrust.metainfo.xml`
+- **Git flow executed:** develop → master (--no-ff merge), tagged v0.2.0, master → develop sync
+- **Tag pushed:** `v0.2.0` triggers release workflow building CLI (Linux/Windows), GUI (Linux), AppImage
+- **Follow-ups:** Real icon needed (placeholder functional), SteamOS hardware testing pending
+- **Release includes:** AppImage packaging, content-based decryption detection, dependency updates, CI fixes

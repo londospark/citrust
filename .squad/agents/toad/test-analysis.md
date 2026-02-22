@@ -290,7 +290,7 @@ g.write(struct.pack('<B', flag))
 ```
 KeyY = First 16 bytes of partition RSA signature
 KeyX = Hardware key selected by partition_flags[3]
-Constant = 0x1FF9E9AAC5FE040802459 1DC5D52768A (hardware constant)
+Constant = [REDACTED] (hardware constant)
 
 NormalKey = ROL(ROL(KeyX, 2, 128) ⊕ KeyY) + Constant, 87, 128)
 ```

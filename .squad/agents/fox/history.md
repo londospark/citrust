@@ -92,3 +92,43 @@ Full egui/eframe GUI implemented with 3-screen workflow (select → decrypt → 
   - Target: x86_64 architecture (ARCH env var overridable)
 - **CI integration:** Script designed for GitHub Actions; example: `packaging/build-appimage.sh target/x86_64-unknown-linux-gnu/release/citrust-gui`
 - **Blocker:** Real 256x256 PNG icon needed at `packaging/citrust.png` before production release
+
+### 2026-07: Key File Support in GUI (feature/external-keys)
+- **Task:** Added external `aes_keys.txt` key file support to the GUI, wiring into `citrust_core::keydb::KeyDatabase`.
+- **On startup:** `KeyDatabase::search_default_locations()` auto-detects key files in standard Citra locations. Result stored as `Option<PathBuf>` in app state.
+- **Key file indicator:** Compact status line below the ROM selector: shows filename if found, or "Built-in (external aes_keys.txt recommended)" if not. Full path shown on hover tooltip.
+- **Browse button:** 120x40 "Browse…" button next to the indicator opens `rfd::FileDialog` filtered to `.txt`. Validates immediately with `KeyDatabase::from_file()` — shows inline error on parse failure.
+- **Decryption wiring:** Key file path cloned into decryption thread. `KeyDatabase::from_file()` called in-thread; result passed as `Some(&keydb)` to `decrypt_rom`. Falls back to `None` (built-in keys) on load failure with a warning in the progress log.
+- **App state fields added:** `key_file_path: Option<PathBuf>`, `key_file_status: String`
+- **No citrust-core changes:** All changes confined to `crates/citrust-gui/src/main.rs`
+- **Verification:** `cargo build -p citrust-gui` ✅, `cargo clippy -p citrust-gui -- -D warnings` ✅ (zero warnings)
+
+### 2026-07: GUI Layout Cleanup — Key Footer Refactor
+- **Task:** Moved key file section from inline in `show_select_file_screen` to a persistent `TopBottomPanel::bottom()` footer visible on all screens.
+- **Changes:**
+  - Registered custom `TextStyle::Name("Small")` at 16px in the style setup alongside existing text styles.
+  - Removed separator and key file UI block from `show_select_file_screen` — the select screen is now a clean centered flow: heading → Select ROM → selected file + Decrypt.
+  - Created `show_key_footer()` method rendering a slim 36px bottom panel with muted gray (140) key status text on the left and a frameless "Browse…" link-button on the right.
+  - Footer renders before `CentralPanel` in the `update()` method so it appears on SelectFile, Decrypting, and Done screens.
+  - All existing functionality preserved: auto-detect on startup, Browse dialog with validation, hover tooltip for full path, key file path passed to decryption thread.
+- **Design insight:** `TopBottomPanel` must be added before `CentralPanel` in egui's immediate mode — egui allocates panel space in call order. The footer claims its 36px first, then CentralPanel fills the remainder.
+- **Verification:** `cargo build -p citrust-gui` ✅, `cargo clippy -p citrust-gui -- -D warnings` ✅, `cargo fmt --check -p citrust-gui` ✅
+
+### 2026-07: Mandatory Key File — GUI Redesign
+- **Task:** Redesigned GUI for mandatory external key file (no more built-in key fallback). Key file is now REQUIRED before decryption.
+- **New Screen:** `Screen::KeySetup` — shown when no keys are auto-detected on startup. Prominent centered layout with "🔑 Key Setup Required" heading, explanation text, large Browse button, and GodMode9/README helper text.
+- **App State Changes:**
+  - Replaced `key_file_path: Option<PathBuf>` + `key_file_status: String` with `keydb: Option<KeyDatabase>` + `key_status: String` + `key_save_message: Option<String>`
+  - `KeyDatabase` is now loaded and stored in memory (no re-reading from file on each decrypt)
+  - Cloned into decryption thread — passed as mandatory `&keydb` to `decrypt_rom()`
+- **Key Persistence Flow:** When user browses for a key file:
+  1. Parse with `KeyDatabase::from_file()`
+  2. Save copy to config dir via `KeyDatabase::save_to_file()` + `default_save_path()`
+  3. Show toast: "✅ Keys saved — you won't need to do this again"
+  4. Transition seamlessly to SelectFile screen
+- **Startup Auto-Detection:** `search_default_locations()` → `from_file()` → if found, start on SelectFile with subtle footer; if not, start on KeySetup screen
+- **Footer:** Only shown when keys are loaded (hidden on KeySetup screen). Shows "🔑 Keys loaded (N keys)" in muted 16px text with frameless Browse… to change keys.
+- **Error Handling:** Invalid key file shows red error on KeySetup screen; parse errors don't transition away
+- **Decryption Threading:** KeyDatabase cloned into thread, passed as `&keydb` (mandatory ref, not Option)
+- **Coordinated with Link's core changes:** `decrypt_rom` signature now `keydb: &KeyDatabase` (mandatory), `save_to_file()` and `default_save_path()` already added by Link
+- **Verification:** `cargo check --workspace` ✅, `cargo clippy --workspace -- -D warnings` ✅, `cargo test --workspace` ✅ (41 tests pass)

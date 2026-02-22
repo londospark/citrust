@@ -33,7 +33,7 @@ NCSD Container (header at 0x100)
    - `KeyY` = first 16 bytes of partition signature
    - `KeyX` = selected by crypto method (flags[3]): 0x2C, 0x25, 0x18, or 0x1B
    - `NormalKey2C` = always derived from KeyX0x2C (base key for ExHeader/ExeFS table)
-   - `Constant` = 3DS hardware constant `00000000000000000000000000000000`
+   - `Constant` = 3DS hardware constant [REDACTED]
 
 2. **Decryption Sections** (all AES-128-CTR):
    | Section | Key | IV |

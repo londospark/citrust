@@ -26,6 +26,11 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.3.0" date="2026-07-17">
+      <description>
+        <p>BREAKING: Removed hardcoded encryption keys for DMCA compliance. External aes_keys.txt file is now required. GUI prompts for key file on first launch and saves keys automatically.</p>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-07-16">
       <description>
         <p>AppImage packaging for SteamOS/Steam Deck, content-based decryption detection, dependency updates.</p>

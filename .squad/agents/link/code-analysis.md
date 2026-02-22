@@ -93,11 +93,11 @@ const ROMFS_COUNTER: u64 = 0x03_00_00_00_00_00_00_00;
 Constant = struct.unpack('>QQ', '\x1F\xF9\xE9\xAA\xC5\xFE\x04\x08\x02\x45\x91\xDC\x5D\x52\x76\x8A')
 ```
 
-This is a 128-bit constant: `0x0000000000000000000000000000000` (big-endian tuple of two u64s).
+This is a 128-bit constant: [REDACTED] (big-endian tuple of two u64s).
 
 **Rust:**
 ```rust
-const HARDWARE_CONSTANT: u128 = 0x0000000000000000000000000000000;
+const HARDWARE_CONSTANT: u128 = [REDACTED];
 ```
 
 ---
@@ -114,10 +114,10 @@ Each unpacked as `struct.unpack('>QQ', bytes)` → tuple of two u64s, later conv
 
 **Rust:** Store as `u128` constants or in a lookup table (enum):
 ```rust
-const KEY_X_0x2C: u128 = 0x00000000000000000000000000000000;
-const KEY_X_0x25: u128 = 0x00000000000000000000000000000000;
-const KEY_X_0x18: u128 = 0x00000000000000000000000000000000;
-const KEY_X_0x1B: u128 = 0x00000000000000000000000000000000;
+const KEY_X_0x2C: u128 = [REDACTED];
+const KEY_X_0x25: u128 = [REDACTED];
+const KEY_X_0x18: u128 = [REDACTED];
+const KEY_X_0x1B: u128 = [REDACTED];
 
 enum KeySlot {
     ZeroKey,
@@ -171,7 +171,7 @@ Where:
 **Rust Implementation:**
 ```rust
 fn derive_normal_key(key_x: u128, key_y: u128) -> u128 {
-    const HARDWARE_CONSTANT: u128 = 0x0000000000000000000000000000000;
+    const HARDWARE_CONSTANT: u128 = [REDACTED];
     
     let step1 = rol(key_x, 2, 128);
     let step2 = step1 ^ key_y;
@@ -545,7 +545,7 @@ Offset   Size    Name                Value/Description
 NormalKey = rol((rol(KeyX, 2, 128) XOR KeyY) + Constant, 87, 128)
 ```
 
-**Hardware Constant:** `0x0000000000000000000000000000000`
+**Hardware Constant:** [REDACTED]
 
 **KeyX Selection (by firmware/partition):**
 - **0x2C** (retail, < 6.x): Oldest games
