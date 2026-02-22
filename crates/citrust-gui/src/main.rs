@@ -1,3 +1,4 @@
+use citrust_core::keydb::KeyDatabase;
 use eframe::egui;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -66,15 +67,33 @@ struct CitrustApp {
     selected_file: Option<PathBuf>,
     decrypt_state: Option<DecryptState>,
     done_state: Option<DoneState>,
+    key_file_path: Option<PathBuf>,
+    key_file_status: String,
 }
 
 impl Default for CitrustApp {
     fn default() -> Self {
+        let (key_file_path, key_file_status) = match KeyDatabase::search_default_locations() {
+            Some(path) => {
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| path.display().to_string());
+                (Some(path), format!("🔑 Keys: {name}"))
+            }
+            None => (
+                None,
+                "🔑 Keys: Built-in (external aes_keys.txt recommended)".to_string(),
+            ),
+        };
+
         Self {
             screen: Screen::SelectFile,
             selected_file: None,
             decrypt_state: None,
             done_state: None,
+            key_file_path,
+            key_file_status,
         }
     }
 }
@@ -115,6 +134,42 @@ impl CitrustApp {
                     self.start_decryption(path.clone());
                 }
             }
+
+            ui.add_space(40.0);
+            ui.separator();
+            ui.add_space(10.0);
+
+            // Key file status indicator and browse button
+            ui.horizontal(|ui| {
+                let status_response = ui.label(&self.key_file_status);
+                if let Some(path) = &self.key_file_path {
+                    status_response.on_hover_text(path.display().to_string());
+                }
+
+                if ui
+                    .add_sized([120.0, 40.0], egui::Button::new("Browse…"))
+                    .clicked()
+                    && let Some(path) = rfd::FileDialog::new()
+                        .add_filter("Key File", &["txt"])
+                        .set_title("Select aes_keys.txt")
+                        .pick_file()
+                {
+                    match KeyDatabase::from_file(&path) {
+                        Ok(_) => {
+                            let name = path
+                                .file_name()
+                                .map(|n| n.to_string_lossy().into_owned())
+                                .unwrap_or_else(|| path.display().to_string());
+                            self.key_file_status = format!("🔑 Keys: {name}");
+                            self.key_file_path = Some(path);
+                        }
+                        Err(e) => {
+                            self.key_file_status = format!("🔑 Keys: Error — {e}");
+                            self.key_file_path = None;
+                        }
+                    }
+                }
+            });
         });
 
         ctx.request_repaint();
@@ -262,12 +317,27 @@ impl CitrustApp {
         let (tx, rx): (Sender<ProgressMessage>, Receiver<ProgressMessage>) = channel();
 
         let decrypt_path = path.clone();
+        let key_path = self.key_file_path.clone();
         thread::spawn(move || {
             let _ = tx.send(ProgressMessage::Started);
 
-            let result = citrust_core::decrypt::decrypt_rom(&decrypt_path, |progress_text| {
-                let _ = tx.send(ProgressMessage::Update(progress_text.to_string()));
+            let keydb = key_path.and_then(|p| match KeyDatabase::from_file(&p) {
+                Ok(db) => Some(db),
+                Err(e) => {
+                    let _ = tx.send(ProgressMessage::Update(format!(
+                        "Warning: failed to load key file: {e}"
+                    )));
+                    None
+                }
             });
+
+            let result = citrust_core::decrypt::decrypt_rom(
+                &decrypt_path,
+                keydb.as_ref(),
+                |progress_text| {
+                    let _ = tx.send(ProgressMessage::Update(progress_text.to_string()));
+                },
+            );
 
             match result {
                 Ok(_) => {

@@ -6,6 +6,7 @@ use memmap2::MmapMut;
 use rayon::prelude::*;
 
 use crate::crypto::aes_ctr_decrypt;
+use crate::keydb::KeyDatabase;
 use crate::keys::{self, CONSTANT, CryptoMethod, KEY_X_2C, Key128};
 use crate::ncch::NcchHeader;
 use crate::ncsd::NcsdHeader;
@@ -16,6 +17,8 @@ pub enum Error {
     NotNcsd,
     #[error("partition {0}: invalid NCCH header")]
     InvalidNcch(u8),
+    #[error("key not found in database: {0}")]
+    KeyNotFound(String),
     #[error("I/O error: {0}")]
     Io(#[from] io::Error),
 }
@@ -87,7 +90,61 @@ fn decrypt_slice(
         });
 }
 
-pub fn decrypt_rom(path: &Path, mut on_progress: impl FnMut(&str)) -> Result<(), Error> {
+/// Resolve KeyX for a given crypto method, preferring the external key database if provided.
+fn resolve_key_x(
+    method: CryptoMethod,
+    keydb: Option<&KeyDatabase>,
+) -> Result<u128, Error> {
+    if let Some(db) = keydb {
+        let slot = match method {
+            CryptoMethod::Original => 0x2C,
+            CryptoMethod::Key7x => 0x25,
+            CryptoMethod::Key93 => 0x18,
+            CryptoMethod::Key96 => 0x1B,
+        };
+        db.get_key_x(slot).ok_or_else(|| {
+            Error::KeyNotFound(format!("slot0x{:02X}KeyX", slot))
+        })
+    } else {
+        Ok(keys::key_x_for_method(method))
+    }
+}
+
+/// Resolve the generator constant, preferring the external key database if provided.
+fn resolve_constant(keydb: Option<&KeyDatabase>) -> Result<u128, Error> {
+    if let Some(db) = keydb {
+        db.generator()
+            .ok_or_else(|| Error::KeyNotFound("generator".to_string()))
+    } else {
+        Ok(CONSTANT)
+    }
+}
+
+/// Resolve KeyX for slot 0x2C specifically (used for ExHeader/ExeFS base layer).
+fn resolve_key_x_2c(keydb: Option<&KeyDatabase>) -> Result<u128, Error> {
+    if let Some(db) = keydb {
+        db.get_key_x(0x2C).ok_or_else(|| {
+            Error::KeyNotFound("slot0x2CKeyX".to_string())
+        })
+    } else {
+        Ok(KEY_X_2C)
+    }
+}
+
+pub fn decrypt_rom(
+    path: &Path,
+    keydb: Option<&KeyDatabase>,
+    mut on_progress: impl FnMut(&str),
+) -> Result<(), Error> {
+    if let Some(db) = keydb {
+        on_progress(&format!(
+            "Using external key database ({} keys loaded)",
+            db.len()
+        ));
+    } else {
+        on_progress("Using built-in keys");
+    }
+
     let file = File::options().read(true).write(true).open(path)?;
     // SAFETY: we are the sole accessor of this file during decryption
     let mut mmap = unsafe { MmapMut::map_mut(&file)? };
@@ -166,10 +223,12 @@ pub fn decrypt_rom(path: &Path, mut on_progress: impl FnMut(&str)) -> Result<(),
             }
             (0u128, 0u128)
         } else {
-            let nk2c = crate::crypto::derive_normal_key(KEY_X_2C, key_y, CONSTANT);
+            let constant = resolve_constant(keydb)?;
+            let key_x_2c = resolve_key_x_2c(keydb)?;
+            let nk2c = crate::crypto::derive_normal_key(key_x_2c, key_y, constant);
             let method = ncch.crypto_method().unwrap_or(CryptoMethod::Original);
-            let key_x = keys::key_x_for_method(method);
-            let nk = crate::crypto::derive_normal_key(key_x, key_y, CONSTANT);
+            let key_x = resolve_key_x(method, keydb)?;
+            let nk = crate::crypto::derive_normal_key(key_x, key_y, constant);
             if p == 0 {
                 on_progress(&format!("Encryption Method: {method:?}"));
             }
@@ -473,7 +532,7 @@ mod tests {
             f.write_all(&rom).expect("write temp file");
         }
 
-        let result = decrypt_rom(&tmp_path, |msg| {
+        let result = decrypt_rom(&tmp_path, None, |msg| {
             eprintln!("  [content-detect] {msg}");
         });
 
@@ -567,7 +626,7 @@ mod tests {
         }
 
         let messages: Mutex<Vec<String>> = Mutex::new(Vec::new());
-        let result = decrypt_rom(&tmp_path, |msg| {
+        let result = decrypt_rom(&tmp_path, None, |msg| {
             messages.lock().unwrap().push(msg.to_string());
         });
 

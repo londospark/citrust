@@ -63,3 +63,13 @@ Achieved 1.50x final speedup (2.34s → 1.56s baseline) via combined AES-NI + ch
 - **Backup flags:** NCSD stores backup partition flags at 0x1188. If the backup has a valid non-zero crypto_method, it's written into the NCCH header before re-parsing. Otherwise defaults to CryptoMethod::Original (0x00).
 - **Implementation:** Minimal change — replaced the 4-line `is_no_crypto()` check block with a `let ncch = if ... else` that either continues (skip) or rebinds `ncch` with corrected flags and falls through. No changes to any other decryption logic.
 - **Test:** `test_decrypt_detects_encrypted_despite_nocrypto_flag` — synthetic ROM with NoCrypto=True + FixedKey + random ExeFS bytes. Verifies warning message is logged, content is modified (decryption applied), and NoCrypto flag is set post-decryption. All 25 tests pass.
+
+### External Key Database Support (2026-07, feature/external-keys)
+- **Created `keydb.rs`** — Citra-compatible `aes_keys.txt` parser. `KeyDatabase` struct with `HashMap<String, u128>`, parsed from `BufRead` or file path. Supports `from_reader()`, `from_file()`, `search_default_locations()`, and typed lookups (`generator()`, `get_key_x(slot)`, `get_key_y(slot)`, `get_key_n(slot)`, `get_common(idx)`, `get_common_n(idx)`).
+- **Robustness:** Handles BOM, mixed-case hex, whitespace trimming, comments, blank lines, Windows line endings, split-on-first-`=`, duplicate key warnings (last wins). Clear errors with line numbers for invalid hex, wrong length, missing `=`.
+- **Integration:** `decrypt_rom()` signature changed to accept `Option<&KeyDatabase>`. When `Some`, uses external keys via `resolve_key_x()`, `resolve_key_x_2c()`, `resolve_constant()` helpers. When `None`, falls back to hardcoded constants exactly as before. Added `Error::KeyNotFound(String)` variant.
+- **CLI:** Added `--keys <path>` optional clap argument. If specified, loads from that path (hard error if invalid). Otherwise tries `search_default_locations()`. Passes `Option<&KeyDatabase>` to `decrypt_rom`.
+- **Default locations:** `./aes_keys.txt`, `~/.config/citrust/aes_keys.txt` (Linux), `%APPDATA%\citrust\aes_keys.txt` (Windows), Citra/Azahar sysdata paths.
+- **Test coverage:** 17 new unit tests in `keydb.rs` (valid parsing, comments, BOM, invalid hex, wrong length, no `=`, lookups, missing keys, case insensitivity, duplicates, empty file, default locations, mixed case hex, whitespace, Windows CRLF, file not found, split-on-first-`=`).
+- **GUI note:** `decrypt_rom` signature change requires GUI update (Fox's domain). GUI not included in build verification scope.
+- **All 42 unit tests pass.** 5 integration tests compile (ignored). Zero clippy warnings.

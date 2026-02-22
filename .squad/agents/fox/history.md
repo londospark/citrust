@@ -92,3 +92,13 @@ Full egui/eframe GUI implemented with 3-screen workflow (select → decrypt → 
   - Target: x86_64 architecture (ARCH env var overridable)
 - **CI integration:** Script designed for GitHub Actions; example: `packaging/build-appimage.sh target/x86_64-unknown-linux-gnu/release/citrust-gui`
 - **Blocker:** Real 256x256 PNG icon needed at `packaging/citrust.png` before production release
+
+### 2026-07: Key File Support in GUI (feature/external-keys)
+- **Task:** Added external `aes_keys.txt` key file support to the GUI, wiring into `citrust_core::keydb::KeyDatabase`.
+- **On startup:** `KeyDatabase::search_default_locations()` auto-detects key files in standard Citra locations. Result stored as `Option<PathBuf>` in app state.
+- **Key file indicator:** Compact status line below the ROM selector: shows filename if found, or "Built-in (external aes_keys.txt recommended)" if not. Full path shown on hover tooltip.
+- **Browse button:** 120x40 "Browse…" button next to the indicator opens `rfd::FileDialog` filtered to `.txt`. Validates immediately with `KeyDatabase::from_file()` — shows inline error on parse failure.
+- **Decryption wiring:** Key file path cloned into decryption thread. `KeyDatabase::from_file()` called in-thread; result passed as `Some(&keydb)` to `decrypt_rom`. Falls back to `None` (built-in keys) on load failure with a warning in the progress log.
+- **App state fields added:** `key_file_path: Option<PathBuf>`, `key_file_status: String`
+- **No citrust-core changes:** All changes confined to `crates/citrust-gui/src/main.rs`
+- **Verification:** `cargo build -p citrust-gui` ✅, `cargo clippy -p citrust-gui -- -D warnings` ✅ (zero warnings)

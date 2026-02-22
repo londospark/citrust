@@ -7,9 +7,10 @@
 //! that AES-NI acceleration and chunk-size tuning preserve byte-identical output.
 
 use std::fs;
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::path::PathBuf;
 
+use citrust_core::keydb::KeyDatabase;
 use sha2::{Digest, Sha256};
 
 const POKEMON_Y: &str = "0451 - Pokemon Y (Europe) (En,Ja,Fr,De,Es,It,Ko) Decrypted.3ds";
@@ -53,7 +54,7 @@ fn decrypt_pokemon_y_matches_known_hash() {
     let tmp = PathBuf::from("test-fixtures").join("temp_pokemon_y.3ds");
     fs::copy(&src, &tmp).expect("Failed to copy ROM to temp file");
 
-    let result = citrust_core::decrypt::decrypt_rom(&tmp, |msg| {
+    let result = citrust_core::decrypt::decrypt_rom(&tmp, None, |msg| {
         eprintln!("{msg}");
     });
     assert!(result.is_ok(), "Decryption failed: {:?}", result.err());
@@ -74,7 +75,7 @@ fn decrypt_omega_ruby_matches_known_hash() {
     let tmp = PathBuf::from("test-fixtures").join("temp_omega_ruby.3ds");
     fs::copy(&src, &tmp).expect("Failed to copy ROM to temp file");
 
-    let result = citrust_core::decrypt::decrypt_rom(&tmp, |msg| {
+    let result = citrust_core::decrypt::decrypt_rom(&tmp, None, |msg| {
         eprintln!("{msg}");
     });
     assert!(result.is_ok(), "Decryption failed: {:?}", result.err());
@@ -96,11 +97,11 @@ fn decrypt_already_decrypted_is_noop() {
     fs::copy(&src, &tmp).expect("Failed to copy ROM to temp file");
 
     // First decryption
-    citrust_core::decrypt::decrypt_rom(&tmp, |_| {}).expect("First decryption failed");
+    citrust_core::decrypt::decrypt_rom(&tmp, None, |_| {}).expect("First decryption failed");
     let hash_after_first = sha256_file(&tmp);
 
     // Second decryption — should detect NoCrypto flag and skip all partitions
-    citrust_core::decrypt::decrypt_rom(&tmp, |_| {}).expect("Second decryption failed");
+    citrust_core::decrypt::decrypt_rom(&tmp, None, |_| {}).expect("Second decryption failed");
     let hash_after_second = sha256_file(&tmp);
 
     let _ = fs::remove_file(&tmp);
@@ -150,4 +151,57 @@ fn ncch_header_from_real_rom() {
 
     assert_ne!(ncch.key_y, 0, "KeyY should be non-zero");
     assert_ne!(ncch.title_id, 0, "TitleID should be non-zero");
+}
+
+// ---------------------------------------------------------------------------
+// Key database integration tests
+// ---------------------------------------------------------------------------
+
+/// Build a KeyDatabase containing the same keys that are hardcoded in keys.rs.
+fn make_test_keydb() -> KeyDatabase {
+    let keys_text = "\
+generator=1FF9E9AAC5FE0408024591DC5D52768A
+slot0x2CKeyX=B98E95CECA3E4D171F76A94DE934C053
+slot0x25KeyX=CEE7D8AB30C00DAE850EF5E382AC5AF3
+slot0x18KeyX=82E9C9BEBFB8BDB875ECC0A07D474374
+slot0x1BKeyX=45AD04953992C7C893724A9A7BCE6182
+";
+    KeyDatabase::from_reader(Cursor::new(keys_text)).expect("Failed to parse test key data")
+}
+
+/// Decrypt Pokemon Y with external keys and verify the hash matches the known-good value.
+/// This proves the external key path produces byte-identical output to built-in keys.
+#[test]
+#[ignore]
+fn decrypt_with_external_keys_matches_builtin() {
+    let src = test_rom_path(POKEMON_Y).expect("Pokemon Y ROM not found in Test Files/");
+    let keydb = make_test_keydb();
+
+    let tmp = PathBuf::from("test-fixtures").join("temp_keydb_test.3ds");
+    fs::copy(&src, &tmp).expect("Failed to copy ROM to temp file");
+
+    let result = citrust_core::decrypt::decrypt_rom(&tmp, Some(&keydb), |msg| {
+        eprintln!("{msg}");
+    });
+    assert!(result.is_ok(), "Decryption with external keys failed: {:?}", result.err());
+
+    let hash = sha256_file(&tmp);
+    let _ = fs::remove_file(&tmp);
+
+    assert_eq!(
+        hash, POKEMON_Y_HASH,
+        "Decryption with external keys produced different output than built-in keys"
+    );
+}
+
+/// Verify KeyDatabase is correctly populated with expected keys.
+#[test]
+fn keydb_has_expected_keys() {
+    let db = make_test_keydb();
+    assert_eq!(db.len(), 5);
+    assert!(db.generator().is_some());
+    assert!(db.get_key_x(0x2C).is_some());
+    assert!(db.get_key_x(0x25).is_some());
+    assert!(db.get_key_x(0x18).is_some());
+    assert!(db.get_key_x(0x1B).is_some());
 }
