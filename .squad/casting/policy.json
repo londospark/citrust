@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "universes_allowed": ["nintendo"],
+  "max_capacity_per_universe": 25,
+  "scribe_exempt": true,
+  "ralph_exempt": true,
+  "copilot_exempt": true
+}

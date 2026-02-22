@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "assignments": [
+    {
+      "assignment_id": "citrust-nintendo-001",
+      "universe": "nintendo",
+      "timestamp": "2026-02-22T01:21:04.669Z",
+      "agents": [
+        { "name": "Samus", "role": "Lead" },
+        { "name": "Link", "role": "Core Dev" },
+        { "name": "Fox", "role": "GUI Dev" },
+        { "name": "Toad", "role": "Tester" }
+      ],
+      "reason": "User requested Nintendo universe for 3DS decryption tool port"
+    }
+  ]
+}
