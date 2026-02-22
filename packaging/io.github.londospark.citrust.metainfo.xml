@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.londospark.citrust</id>
+  <name>citrust</name>
+  <summary>3DS ROM Decryption Tool</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+
+  <description>
+    <p>
+      citrust is a fast, native 3DS ROM decryption tool built in Rust.
+      It provides a gamepad-friendly GUI optimized for Steam Deck and SteamOS,
+      with real-time progress tracking and support for all 3DS encryption methods.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">citrust-gui.desktop</launchable>
+
+  <url type="homepage">https://github.com/londospark/citrust</url>
+  <url type="bugtracker">https://github.com/londospark/citrust/issues</url>
+
+  <provides>
+    <binary>citrust-gui</binary>
+  </provides>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.2.0" date="2026-07-16">
+      <description>
+        <p>AppImage packaging for SteamOS/Steam Deck, content-based decryption detection, dependency updates.</p>
+      </description>
+    </release>
+    <release version="0.1.0" date="2026-02-22">
+      <description>
+        <p>Initial release with GUI decryption support.</p>
+      </description>
+    </release>
+  </releases>
+</component>
