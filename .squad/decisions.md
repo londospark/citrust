@@ -4,6 +4,111 @@
 
 ---
 
+## 2026-02-22: Workspace Conversion (Issue #17)
+
+**By:** Link (Core Dev)  
+**Date:** 2026-02-22  
+**Status:** Implemented  
+**Category:** Architecture
+
+Converted citrust from a single crate to a Cargo workspace with 3 member crates:
+
+- **citrust-core** — library crate (crypto, parsing, decryption logic)
+- **citrust-cli** — binary crate producing `citrust` CLI executable
+- **citrust-gui** — binary crate producing `citrust-gui` GUI executable
+
+**Structure:**
+```
+crates/
+├── citrust-core/   # lib: aes, ctr, cipher, rayon, memmap2, thiserror
+│   ├── src/        # lib.rs, keys.rs, crypto.rs, ncsd.rs, ncch.rs, decrypt.rs
+│   ├── benches/    # criterion benchmarks
+│   └── tests/      # integration tests
+├── citrust-cli/    # bin: depends on citrust-core, clap, indicatif
+│   └── src/main.rs
+└── citrust-gui/    # bin: depends on citrust-core, eframe, rfd
+    └── src/main.rs
+```
+
+**Key Decisions:**
+1. Benchmarks and integration tests live in citrust-core (criterion requires `[[bench]]` in crate Cargo.toml)
+2. Import path is `citrust_core::` (underscore, per Rust convention for hyphenated crate names)
+3. CI uses `--workspace` flags for check/test/clippy; release uses `-p citrust-cli` for targeted builds
+4. Resolver = "3" (edition 2024 default)
+
+**Verification:**
+- All 19 unit tests pass
+- 5 integration tests compile (ignored, require ROM files)
+- GUI binary compiles successfully
+- CLI binary compiles successfully
+
+---
+
+## 2026-02-22: Distribution Strategy for citrust
+
+**Lead:** Samus  
+**Status:** Recommended  
+**Category:** Infrastructure  
+**Complexity:** Extensive analysis (360+ lines)
+
+**Executive Summary:**
+
+citrust is a Rust-based 3DS ROM decryption tool with CLI + GUI (gamepad-optimized, 1280x800). To maximize adoption, prioritize **Flatpak (Flathub) for SteamOS/Steam Deck** and **AppImage for portability**, with **winget for Windows** as secondary. These three channels cover the largest audience with manageable effort.
+
+**Recommended Channels (Priority Ranked):**
+
+| Channel | Rating | Effort | Priority | Notes |
+|---------|--------|--------|----------|-------|
+| **Flatpak** | 🟢 Recommended | Medium | #1 | SteamOS/Steam Deck native; Discover integration. Start here. |
+| **AppImage** | 🟢 Recommended | Low–Med | #2 | Portable, zero-install; works everywhere. Do immediately after Flatpak. |
+| **winget** | 🟢 Recommended | Low | #2b | Windows users; minimal effort. Do in parallel or after AppImage. |
+| **AUR** | 🟡 Nice-to-have | Low | #3 | Arch enthusiasts; read-only rootfs issue limits appeal. Defer. |
+| **Scoop** | 🟡 Nice-to-have | Very Low | #4 | Windows devs; minimal effort. After winget. |
+| **Homebrew** | 🟡 Nice-to-have | Low–Med | #5 | Niche macOS audience. Defer unless explicit demand. |
+| **Snap** | 🔴 Skip | Medium | — | SteamOS doesn't use Snap; inferior to Flatpak. Skip. |
+| **Steam Store** | 🔴 Skip | N/A | — | Not feasible for indie project. Use AppImage + Steam non-Steam game. |
+
+**Key Insights:**
+1. Flatpak is table-stakes for SteamOS/Steam Deck adoption
+2. AppImage essential for portability and zero-install UX
+3. Gamepad support works seamlessly once sandboxing permissions are correct
+4. SteamOS read-only rootfs eliminates AUR as primary channel
+5. Windows gamers served via winget with minimal effort
+
+**Implementation Timeline:**
+- **Phase 1 (Week 1–2):** Flatpak manifest, AppStream metadata, icon, desktop file
+- **Phase 2 (Week 2–3):** AppImage CI/CD + winget manifests (parallel)
+- **Phase 3 (Week 4+):** AUR + Scoop (if demand)
+
+**Full analysis in original decision document — covers channel requirements, SteamOS considerations, resource links, and comprehensive next-steps checklist.**
+
+---
+
+## 2026-02-22: Integration Test Architecture
+
+**By:** Toad (Tester)  
+**Date:** 2026-02-22  
+**Status:** Implemented  
+**Category:** Testing
+
+Integration tests live in `tests/integration_tests.rs` (standard Rust integration test location), separate from inline unit tests in `src/`. They use `#[ignore]` to skip by default since they require ~1.7 GB ROM files.
+
+**Key Choices:**
+1. Temp files in `test-fixtures/` — avoids adding `tempfile` crate; directory is gitignored so temp files are safe
+2. SHA256 verification — `sha2` added to `[dev-dependencies]` only; used to verify byte-identical output against known hashes
+3. No-op test — verifies that decrypt → decrypt produces identical output (NoCrypto flag works correctly)
+4. Dual purpose — these tests also serve as Phase 2 regression tests; same hashes confirm AES-NI optimizations preserve correctness
+
+**Running:**
+```bash
+cargo test                # 19 unit tests (fast, no ROM files needed)
+cargo test -- --ignored   # 5 integration tests (requires ROM files in Test Files/)
+```
+
+**Impact:** All agents: if you change crypto, decryption, or header parsing code, integration tests will catch regressions. Run `cargo test -- --ignored` before merging crypto changes.
+
+---
+
 ## 2026-02-22: Copilot Directive (Implementation Phases)
 
 **By:** Gareth (via Copilot)  

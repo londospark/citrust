@@ -37,3 +37,6 @@ Achieved 1.50x final speedup (2.34s → 1.56s baseline) via combined AES-NI + ch
 - **CI Updated:** `ci.yml` uses `--workspace` flag for check/test/clippy and `--all` for fmt. `release.yml` uses `-p citrust-cli` for targeted binary builds.
 - **Key Paths:** Root `Cargo.toml` = workspace manifest only. Core lib at `crates/citrust-core/`. CLI at `crates/citrust-cli/`. GUI at `crates/citrust-gui/`.
 - **All 19 unit tests pass.** Integration tests (5, ignored) and GUI binary also compile successfully.
+
+### 2026-02-22: Team Batch Completion
+- **Orchestration complete.** Fox built full egui/eframe GUI (9.2 MB, 1280x800 Steam Deck native, gamepad-friendly dark theme). Samus completed comprehensive distribution strategy analysis (Flatpak #1, AppImage #2, winget #2b, with detailed roadmap). All decisions merged into `.squad/decisions.md`. Orchestration logs written. Session log created.
