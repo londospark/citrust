@@ -183,7 +183,11 @@ fn decrypt_with_external_keys_matches_builtin() {
     let result = citrust_core::decrypt::decrypt_rom(&tmp, Some(&keydb), |msg| {
         eprintln!("{msg}");
     });
-    assert!(result.is_ok(), "Decryption with external keys failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Decryption with external keys failed: {:?}",
+        result.err()
+    );
 
     let hash = sha256_file(&tmp);
     let _ = fs::remove_file(&tmp);

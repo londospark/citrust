@@ -23,7 +23,11 @@ fn main() {
     let keydb = if let Some(ref keys_path) = cli.keys {
         match KeyDatabase::from_file(keys_path) {
             Ok(db) => {
-                println!("Loaded key file: {} ({} keys)", keys_path.display(), db.len());
+                println!(
+                    "Loaded key file: {} ({} keys)",
+                    keys_path.display(),
+                    db.len()
+                );
                 Some(db)
             }
             Err(e) => {
@@ -34,11 +38,18 @@ fn main() {
     } else if let Some(found_path) = KeyDatabase::search_default_locations() {
         match KeyDatabase::from_file(&found_path) {
             Ok(db) => {
-                println!("Found key file: {} ({} keys)", found_path.display(), db.len());
+                println!(
+                    "Found key file: {} ({} keys)",
+                    found_path.display(),
+                    db.len()
+                );
                 Some(db)
             }
             Err(e) => {
-                eprintln!("Warning: found key file at {} but failed to parse: {e}", found_path.display());
+                eprintln!(
+                    "Warning: found key file at {} but failed to parse: {e}",
+                    found_path.display()
+                );
                 None
             }
         }

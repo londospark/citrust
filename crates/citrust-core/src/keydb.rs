@@ -71,11 +71,7 @@ impl KeyDatabase {
                 if !ch.is_ascii_hexdigit() {
                     return Err(KeyDbError::ParseError {
                         line: line_num,
-                        reason: format!(
-                            "invalid hex character '{}' at position {}",
-                            ch,
-                            i + 1
-                        ),
+                        reason: format!("invalid hex character '{}' at position {}", ch, i + 1),
                     });
                 }
             }
@@ -86,7 +82,10 @@ impl KeyDatabase {
             })?;
 
             if keys.contains_key(&name) {
-                eprintln!("warning: duplicate key '{}' on line {}, overwriting", name, line_num);
+                eprintln!(
+                    "warning: duplicate key '{}' on line {}, overwriting",
+                    name, line_num
+                );
             }
 
             keys.insert(name, parsed);
@@ -196,8 +195,14 @@ slot0x25KeyX=CEE7D8AB30C00DAE850EF5E382AC5AF3
         let db = parse(input).unwrap();
         assert_eq!(db.len(), 3);
         assert_eq!(db.generator(), Some(0x1FF9E9AAC5FE0408024591DC5D52768Au128));
-        assert_eq!(db.get_key_x(0x2C), Some(0xB98E95CECA3E4D171F76A94DE934C053u128));
-        assert_eq!(db.get_key_x(0x25), Some(0xCEE7D8AB30C00DAE850EF5E382AC5AF3u128));
+        assert_eq!(
+            db.get_key_x(0x2C),
+            Some(0xB98E95CECA3E4D171F76A94DE934C053u128)
+        );
+        assert_eq!(
+            db.get_key_x(0x25),
+            Some(0xCEE7D8AB30C00DAE850EF5E382AC5AF3u128)
+        );
     }
 
     #[test]
@@ -242,7 +247,10 @@ slot0x2CKeyX=B98E95CECA3E4D171F76A94DE934C053
         match err {
             KeyDbError::ParseError { line, reason } => {
                 assert_eq!(line, 1);
-                assert!(reason.contains("expected 32 hex characters"), "got: {reason}");
+                assert!(
+                    reason.contains("expected 32 hex characters"),
+                    "got: {reason}"
+                );
             }
             _ => panic!("expected ParseError, got {err:?}"),
         }
@@ -271,11 +279,23 @@ common0=D07B337F9CA4385932A2E25723232EB9
 common0N=64C5FD55DD3AD988325BAAEC5243DB98
 ";
         let db = parse(input).unwrap();
-        assert_eq!(db.get_key_x(0x2C), Some(0xB98E95CECA3E4D171F76A94DE934C053u128));
+        assert_eq!(
+            db.get_key_x(0x2C),
+            Some(0xB98E95CECA3E4D171F76A94DE934C053u128)
+        );
         assert_eq!(db.get_key_y(0x18), Some(1u128));
-        assert_eq!(db.get_key_n(0x0C), Some(0xE7C9FF9D4F5B6F4DC5E2F50E856F0AB2u128));
-        assert_eq!(db.get_common(0), Some(0xD07B337F9CA4385932A2E25723232EB9u128));
-        assert_eq!(db.get_common_n(0), Some(0x64C5FD55DD3AD988325BAAEC5243DB98u128));
+        assert_eq!(
+            db.get_key_n(0x0C),
+            Some(0xE7C9FF9D4F5B6F4DC5E2F50E856F0AB2u128)
+        );
+        assert_eq!(
+            db.get_common(0),
+            Some(0xD07B337F9CA4385932A2E25723232EB9u128)
+        );
+        assert_eq!(
+            db.get_common_n(0),
+            Some(0x64C5FD55DD3AD988325BAAEC5243DB98u128)
+        );
     }
 
     #[test]

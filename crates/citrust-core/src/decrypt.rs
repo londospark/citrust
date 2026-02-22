@@ -91,10 +91,7 @@ fn decrypt_slice(
 }
 
 /// Resolve KeyX for a given crypto method, preferring the external key database if provided.
-fn resolve_key_x(
-    method: CryptoMethod,
-    keydb: Option<&KeyDatabase>,
-) -> Result<u128, Error> {
+fn resolve_key_x(method: CryptoMethod, keydb: Option<&KeyDatabase>) -> Result<u128, Error> {
     if let Some(db) = keydb {
         let slot = match method {
             CryptoMethod::Original => 0x2C,
@@ -102,9 +99,8 @@ fn resolve_key_x(
             CryptoMethod::Key93 => 0x18,
             CryptoMethod::Key96 => 0x1B,
         };
-        db.get_key_x(slot).ok_or_else(|| {
-            Error::KeyNotFound(format!("slot0x{:02X}KeyX", slot))
-        })
+        db.get_key_x(slot)
+            .ok_or_else(|| Error::KeyNotFound(format!("slot0x{:02X}KeyX", slot)))
     } else {
         Ok(keys::key_x_for_method(method))
     }
@@ -123,9 +119,8 @@ fn resolve_constant(keydb: Option<&KeyDatabase>) -> Result<u128, Error> {
 /// Resolve KeyX for slot 0x2C specifically (used for ExHeader/ExeFS base layer).
 fn resolve_key_x_2c(keydb: Option<&KeyDatabase>) -> Result<u128, Error> {
     if let Some(db) = keydb {
-        db.get_key_x(0x2C).ok_or_else(|| {
-            Error::KeyNotFound("slot0x2CKeyX".to_string())
-        })
+        db.get_key_x(0x2C)
+            .ok_or_else(|| Error::KeyNotFound("slot0x2CKeyX".to_string()))
     } else {
         Ok(KEY_X_2C)
     }
