@@ -102,3 +102,14 @@ Full egui/eframe GUI implemented with 3-screen workflow (select → decrypt → 
 - **App state fields added:** `key_file_path: Option<PathBuf>`, `key_file_status: String`
 - **No citrust-core changes:** All changes confined to `crates/citrust-gui/src/main.rs`
 - **Verification:** `cargo build -p citrust-gui` ✅, `cargo clippy -p citrust-gui -- -D warnings` ✅ (zero warnings)
+
+### 2026-07: GUI Layout Cleanup — Key Footer Refactor
+- **Task:** Moved key file section from inline in `show_select_file_screen` to a persistent `TopBottomPanel::bottom()` footer visible on all screens.
+- **Changes:**
+  - Registered custom `TextStyle::Name("Small")` at 16px in the style setup alongside existing text styles.
+  - Removed separator and key file UI block from `show_select_file_screen` — the select screen is now a clean centered flow: heading → Select ROM → selected file + Decrypt.
+  - Created `show_key_footer()` method rendering a slim 36px bottom panel with muted gray (140) key status text on the left and a frameless "Browse…" link-button on the right.
+  - Footer renders before `CentralPanel` in the `update()` method so it appears on SelectFile, Decrypting, and Done screens.
+  - All existing functionality preserved: auto-detect on startup, Browse dialog with validation, hover tooltip for full path, key file path passed to decryption thread.
+- **Design insight:** `TopBottomPanel` must be added before `CentralPanel` in egui's immediate mode — egui allocates panel space in call order. The footer claims its 36px first, then CentralPanel fills the remainder.
+- **Verification:** `cargo build -p citrust-gui` ✅, `cargo clippy -p citrust-gui -- -D warnings` ✅, `cargo fmt --check -p citrust-gui` ✅

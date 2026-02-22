@@ -28,6 +28,10 @@ fn main() -> eframe::Result<()> {
             style
                 .text_styles
                 .insert(egui::TextStyle::Button, egui::FontId::proportional(28.0));
+            style.text_styles.insert(
+                egui::TextStyle::Name("Small".into()),
+                egui::FontId::proportional(16.0),
+            );
             cc.egui_ctx.set_style(style);
 
             Ok(Box::new(CitrustApp::default()))
@@ -134,42 +138,6 @@ impl CitrustApp {
                     self.start_decryption(path.clone());
                 }
             }
-
-            ui.add_space(40.0);
-            ui.separator();
-            ui.add_space(10.0);
-
-            // Key file status indicator and browse button
-            ui.horizontal(|ui| {
-                let status_response = ui.label(&self.key_file_status);
-                if let Some(path) = &self.key_file_path {
-                    status_response.on_hover_text(path.display().to_string());
-                }
-
-                if ui
-                    .add_sized([120.0, 40.0], egui::Button::new("Browse…"))
-                    .clicked()
-                    && let Some(path) = rfd::FileDialog::new()
-                        .add_filter("Key File", &["txt"])
-                        .set_title("Select aes_keys.txt")
-                        .pick_file()
-                {
-                    match KeyDatabase::from_file(&path) {
-                        Ok(_) => {
-                            let name = path
-                                .file_name()
-                                .map(|n| n.to_string_lossy().into_owned())
-                                .unwrap_or_else(|| path.display().to_string());
-                            self.key_file_status = format!("🔑 Keys: {name}");
-                            self.key_file_path = Some(path);
-                        }
-                        Err(e) => {
-                            self.key_file_status = format!("🔑 Keys: Error — {e}");
-                            self.key_file_path = None;
-                        }
-                    }
-                }
-            });
         });
 
         ctx.request_repaint();
@@ -360,12 +328,63 @@ impl CitrustApp {
 
         self.screen = Screen::Decrypting;
     }
+
+    fn show_key_footer(&mut self, ctx: &egui::Context) {
+        let small_style = egui::TextStyle::Name("Small".into());
+        egui::TopBottomPanel::bottom("key_footer")
+            .exact_height(36.0)
+            .show(ctx, |ui| {
+                ui.horizontal_centered(|ui| {
+                    let status_response = ui.label(
+                        egui::RichText::new(&self.key_file_status)
+                            .text_style(small_style.clone())
+                            .color(egui::Color32::from_gray(140)),
+                    );
+                    if let Some(path) = &self.key_file_path {
+                        status_response.on_hover_text(path.display().to_string());
+                    }
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    egui::RichText::new("Browse…").text_style(small_style.clone()),
+                                )
+                                .frame(false),
+                            )
+                            .clicked()
+                            && let Some(path) = rfd::FileDialog::new()
+                                .add_filter("Key File", &["txt"])
+                                .set_title("Select aes_keys.txt")
+                                .pick_file()
+                        {
+                            match KeyDatabase::from_file(&path) {
+                                Ok(_) => {
+                                    let name = path
+                                        .file_name()
+                                        .map(|n| n.to_string_lossy().into_owned())
+                                        .unwrap_or_else(|| path.display().to_string());
+                                    self.key_file_status = format!("🔑 Keys: {name}");
+                                    self.key_file_path = Some(path);
+                                }
+                                Err(e) => {
+                                    self.key_file_status = format!("🔑 Keys: Error — {e}");
+                                    self.key_file_path = None;
+                                }
+                            }
+                        }
+                    });
+                });
+            });
+    }
 }
 
 impl eframe::App for CitrustApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Dark theme for SteamOS aesthetic
         ctx.set_visuals(egui::Visuals::dark());
+
+        self.show_key_footer(ctx);
 
         egui::CentralPanel::default().show(ctx, |ui| match self.screen {
             Screen::SelectFile => self.show_select_file_screen(ctx, ui),
