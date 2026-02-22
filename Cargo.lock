@@ -497,21 +497,35 @@ dependencies = [
 ]
 
 [[package]]
-name = "citrust"
+name = "citrust-cli"
+version = "0.1.0"
+dependencies = [
+ "citrust-core",
+ "clap",
+ "indicatif",
+]
+
+[[package]]
+name = "citrust-core"
 version = "0.1.0"
 dependencies = [
  "aes",
  "cipher",
- "clap",
  "criterion",
  "ctr",
- "eframe",
- "indicatif",
  "memmap2",
  "rayon",
- "rfd",
  "sha2",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "citrust-gui"
+version = "0.1.0"
+dependencies = [
+ "citrust-core",
+ "eframe",
+ "rfd",
 ]
 
 [[package]]

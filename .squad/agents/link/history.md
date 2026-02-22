@@ -29,3 +29,11 @@
 ### Phase 2 Completion: 2026-02-22
 
 Achieved 1.50x final speedup (2.34s → 1.56s baseline) via combined AES-NI + chunk tuning. Team batch completed: Toad's 19 tests + benchmarks, Fox's full egui GUI (9.2 MB), Samus's CI/release automation. Phase 3 multi-threading with rayon estimated 2–4x additional speedup. All configurations verified byte-identical via SHA256.
+
+### Phase 4: Workspace Conversion (Issue #17)
+- **Workspace Structure:** Converted single crate to 3-crate Cargo workspace: `citrust-core` (lib), `citrust-cli` (bin), `citrust-gui` (bin) under `crates/` directory.
+- **Import Migration:** All `citrust::` references changed to `citrust_core::` in CLI, GUI, integration tests, and benchmarks. Core library internal `crate::` references unchanged.
+- **Benches & Tests Location:** Moved `benches/` and `tests/` into `crates/citrust-core/` since criterion benchmarks and integration tests need to live inside a specific crate, not at workspace root.
+- **CI Updated:** `ci.yml` uses `--workspace` flag for check/test/clippy and `--all` for fmt. `release.yml` uses `-p citrust-cli` for targeted binary builds.
+- **Key Paths:** Root `Cargo.toml` = workspace manifest only. Core lib at `crates/citrust-core/`. CLI at `crates/citrust-cli/`. GUI at `crates/citrust-gui/`.
+- **All 19 unit tests pass.** Integration tests (5, ignored) and GUI binary also compile successfully.

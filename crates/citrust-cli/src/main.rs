@@ -14,7 +14,7 @@ fn main() {
 
     println!("{}", cli.rom.display());
 
-    if let Err(e) = citrust::decrypt::decrypt_rom(&cli.rom, |msg| {
+    if let Err(e) = citrust_core::decrypt::decrypt_rom(&cli.rom, |msg| {
         println!("{msg}");
     }) {
         eprintln!("Error: {e}");

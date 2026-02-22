@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
-use citrust::crypto::{rol128, derive_normal_key, aes_ctr_decrypt};
+use citrust_core::crypto::{rol128, derive_normal_key, aes_ctr_decrypt};
 
 fn bench_rol128(c: &mut Criterion) {
     let mut group = c.benchmark_group("rol128");
