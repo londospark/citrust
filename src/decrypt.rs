@@ -276,7 +276,7 @@ pub fn decrypt_rom(path: &Path, mut on_progress: impl FnMut(&str)) -> Result<(),
 
         // ======= DECRYPT ROMFS =======
         if ncch.romfs_offset != 0 {
-            let romfs_block_size: usize = 16 * 1024 * 1024;
+            let romfs_block_size: usize = 4 * 1024 * 1024;
             let romfs_total_bytes =
                 ncch.romfs_length as u64 * sector_size as u64;
             let romfs_size_m =
@@ -350,3 +350,9 @@ pub fn decrypt_rom(path: &Path, mut on_progress: impl FnMut(&str)) -> Result<(),
     on_progress("Done...");
     Ok(())
 }
+
+
+
+
+
+

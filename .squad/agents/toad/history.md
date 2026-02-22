@@ -29,3 +29,25 @@
 - Key derivation uses 128-bit rotate-left (ROL) function; Rust should use u128 with wrapping arithmetic
 - AES-CTR counter calculation for ExeFS .code section has integer division (line 162); division by 0x10 must preserve precise offset
 - All offsets are in sectors, not bytes; multiplication by sectorsize is critical
+
+### Unit Tests Implementation: 2026-02-22
+
+**Issue #7 Complete:**
+- Added comprehensive unit tests to src/keys.rs, src/crypto.rs, src/ncsd.rs, src/ncch.rs
+- All 19 tests pass successfully
+- Coverage includes:
+  - keys.rs: CryptoMethod mapping, key constants validation, key_x_for_method correctness
+  - crypto.rs: rol128 edge cases, derive_normal_key known vectors, AES-128-CTR NIST test vectors
+  - ncsd.rs: NCSD header parsing, magic validation, sector size calculation, partition entry helpers
+  - ncch.rs: NCCH header parsing, crypto method detection, flag parsing (NoCrypto/FixedKey), IV construction
+
+**Issue #9 Complete:**
+- Added criterion dev-dependency to Cargo.toml
+- Created benches/crypto_bench.rs with criterion benchmarks for rol128, derive_normal_key, aes_ctr_decrypt (1MB/16MB buffers), full key derivation pipeline
+- Created benches/compare.ps1 PowerShell script for Rust vs Python timing comparison with SHA256 verification
+- All benchmarks compile successfully in release mode
+
+**Test Architecture:**
+- Used inline `#[cfg(test)]` modules in source files (not separate tests/ directory) for better locality
+- NIST SP 800-38A test vectors used for AES-CTR validation
+- Synthetic test data constructed for NCSD/NCCH header parsing (minimal 512-byte structures)
